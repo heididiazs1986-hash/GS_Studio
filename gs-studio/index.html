@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GS Studio · Gestión documental</title>
+<title>GS Studio · Gestión Social</title><link rel="icon" href="./icons/studio-logo.svg" type="image/svg+xml">
 <style>
 :root{font-family:Manrope,system-ui,Arial,sans-serif;color:#1d2736;background:#f7f8fa}*{box-sizing:border-box}
 body{margin:0}header{background:white;border-bottom:1px solid #dce1e7;padding:17px max(22px,calc((100vw - 1120px)/2));display:flex;align-items:center;gap:12px}
@@ -61,16 +61,22 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
  .tile:hover{outline:none}
  .dropzone:hover{background:#fbfcfe;border-color:#bdc9d8}
 }
+.brand-logo{width:47px;height:47px;flex-shrink:0;display:block}
+.tool-icon{width:52px;height:52px;display:block;object-fit:contain;margin-bottom:10px}
+.tile{transition:border-color .16s,box-shadow .16s,transform .16s}
+.tile:hover{box-shadow:0 6px 20px #1d273610;transform:translateY(-1px)}
+.tile:focus-visible{outline:3px solid #2166af;outline-offset:2px}
+@media(max-width:750px){.tool-icon{width:44px;height:44px}.brand-logo{width:42px;height:42px}}
 </style></head>
-<body><header><div class="logo">GS</div><div><strong>GS Studio</strong><div class="subtitle">Centro de gestión documental - Gestión Social</div></div></header>
+<body><header><img class="brand-logo" src="./icons/studio-logo.svg" alt="GS Studio"><div><strong>GS Studio</strong><div class="subtitle">Centro de gestión documental - Gestión Social</div></div></header>
 <main><section class="hero"><div><span class="orange">GESTIÓN DOCUMENTAL</span><h1>Todos tus documentos en un solo lugar.</h1><p class="subtitle">Sin subir tus archivos a nuestros servidores. Conservamos los originales.</p></div></section>
 <section class="tiles" aria-label="Herramientas">
-<button class="tile" data-tool="merge">📚<b>Unir PDF</b><small>Combina documentos y organiza las páginas</small></button>
-<button class="tile" data-tool="images">🖼️<b>Imágenes a PDF</b><small>Convierte JPG y PNG</small></button>
-<button class="tile" data-tool="organize">🗂️<b>Organizar PDF</b><small>Reordena, gira y elimina páginas</small></button>
-<button class="tile" data-tool="split">✂️<b>Dividir PDF</b><small>Extrae páginas por rango</small></button>
-<button class="tile" data-tool="sign">✍️<b>Firmar PDF</b><small>Firma manuscrita visual, sin certificado digital</small></button>
-<button class="tile" data-tool="editor">📝<b>GS Editor</b><small>Abre y corrige paquetes de GS Documentos sin alterar su motor</small></button>
+<button class="tile" data-tool="merge"><img class="tool-icon" src="./icons/merge.svg" alt=""><b>Unir PDF</b><small>Combina documentos completos en el orden que elijas</small></button>
+<button class="tile" data-tool="images"><img class="tool-icon" src="./icons/images.svg" alt=""><b>Imágenes a PDF</b><small>Convierte JPG y PNG</small></button>
+<button class="tile" data-tool="organize"><img class="tool-icon" src="./icons/organize.svg" alt=""><b>Organizar PDF</b><small>Reordena, gira y elimina páginas</small></button>
+<button class="tile" data-tool="split"><img class="tool-icon" src="./icons/split.svg" alt=""><b>Dividir PDF</b><small>Extrae páginas por rango</small></button>
+<button class="tile" data-tool="sign"><img class="tool-icon" src="./icons/sign.svg" alt=""><b>Firmar PDF</b><small>Firma manuscrita visual, sin certificado digital</small></button>
+<button class="tile" data-tool="editor"><img class="tool-icon" src="./icons/editor.svg" alt=""><b>GS Editor</b><small>Abre y corrige paquetes de GS Documentos sin alterar su motor</small></button>
 </section>
 <section class="panel hidden" id="editorWorkspace"><div class="toolbar"><button class="secondary" id="backToPdf" type="button">← Volver a herramientas PDF</button></div><h2>GS Editor · Corrección de paquetes</h2><p class="subtitle">Corrige los datos y pulsa «Generar ZIP corregido». El ZIP se descargará normalmente y sus PDF pasarán a GS Studio para que puedas organizarlos, unirlos y firmarlos. Los soportes siguen únicamente en el ZIP.</p><iframe id="editorFrame" title="Editor de paquetes GS Documentos" src="../editor-pc/index.html" loading="lazy"></iframe></section><section class="panel" id="workspace"><span class="orange">HERRAMIENTA ACTIVA</span><h2 id="toolTitle">Unir PDF</h2>
 <p id="toolHint" class="subtitle">Selecciona los archivos que deseas trabajar.</p>
