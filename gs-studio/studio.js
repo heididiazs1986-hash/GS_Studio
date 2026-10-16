@@ -457,7 +457,7 @@
   // Receives only the corrected ZIP from our embedded, same-origin editor.
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== $('editorFrame').contentWindow) return;
-    if (!event.data || event.data.type !== 'GS_STUDIO_CORRECTED_ZIP' || !(event.data.blob instanceof Blob)) return;
+    if (!event.data || event.data.type !== 'GS_STUDIO_CORRECTED_ZIP' || Object.prototype.toString.call(event.data.blob) !== '[object Blob]') return;
     setTool('merge');
     say('Cargando los PDF del ZIP corregido…');
     try {
