@@ -41,6 +41,7 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 .editor-layout.is-empty .viewer{display:flex;justify-content:center;align-items:center}
 @media(max-width:1050px){.editor-layout{grid-template-columns:150px minmax(0,1fr)}.sidebar-tools{grid-column:1/-1;position:static;min-height:0}.tool-stack{grid-template-columns:repeat(3,1fr)}.settings{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings h3{grid-column:1/-1}}
 @media(max-width:650px){main{padding:10px}.top-row{padding:13px}.editor-layout{grid-template-columns:minmax(0,1fr)}.sidebar{min-height:0;padding:12px}.sidebar-pages{max-height:168px;position:static}.sidebar-pages #thumbs{display:flex;gap:8px;overflow-x:auto}.thumb{min-width:106px;width:106px}.viewer{height:60vh;min-height:340px;padding:9px}.sidebar-tools{grid-column:auto}.tool-stack{grid-template-columns:1fr 1fr}.settings{display:block}.viewer-head{padding:10px}.save-button{min-height:49px}}
+.zoom-controls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.zoom-controls button{min-height:34px;padding:5px 10px}.zoom-controls output{font-weight:750;color:#245881;min-width:55px;text-align:center;font-size:12px}.viewer{scrollbar-gutter:stable}.sheet{flex-shrink:0}.edit-item.whiteout{outline:none!important;box-shadow:none!important}@media(max-width:650px){.zoom-controls{width:100%;justify-content:space-between}}
 </style></head>
 <body>
 <header><a href="../gs-studio/">← GS Studio</a><div><div class="eyebrow">Centro de gestión documental - Gestión Social</div><strong>Editar PDF</strong></div></header>
@@ -49,7 +50,7 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 <div class="editor-layout">
 <aside class="panel sidebar sidebar-pages"><h2>PÁGINAS DEL DOCUMENTO</h2><div id="thumbs" aria-label="Páginas"></div></aside>
 <section class="panel viewer-panel">
-<div class="viewer-head"><strong>Vista del documento</strong><span class="hint">Selecciona una herramienta y trabaja sobre la página</span></div>
+<div class="viewer-head"><strong>Vista del documento</strong><div class="zoom-controls"><button id="zoomOut" title="Reducir zoom" type="button">−</button><output id="zoomValue">100%</output><button id="zoomIn" title="Ampliar zoom" type="button">+</button><button id="fitWidth" type="button">Ajustar al ancho</button></div></div>
 <div class="viewer"><div class="sheet" id="sheet"><canvas id="pageCanvas"></canvas><div id="overlay" class="overlay"></div></div></div>
 </section>
 <aside class="panel sidebar sidebar-tools">
