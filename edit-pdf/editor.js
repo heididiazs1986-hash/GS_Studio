@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null;
+let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={};
 const sheet=$('sheet'),overlay=$('overlay'),status=s=>{$('status').textContent=s};
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const current=()=>items.filter(x=>x.page===selectedPage);
@@ -12,7 +12,7 @@ async function loadFile(file){
   original=new Uint8Array(await file.arrayBuffer());
   doc=await PDFLib.PDFDocument.load(original.slice());
   viewDoc=await pdfjsLib.getDocument({data:original.slice()}).promise;
-  items=[];selected=null;selectedPage=0;
+  items=[];selected=null;selectedPage=0;deskew={};
   $('thumbs').replaceChildren();
   for(let i=0;i<viewDoc.numPages;i++){
    const p=await viewDoc.getPage(i+1),vp=p.getViewport({scale:.18});
@@ -27,12 +27,16 @@ async function loadFile(file){
 }
 async function showPage(index){
  selectedPage=index;selected=null;
+ $('deskewAngle').disabled=false;$('deskewReset').disabled=false;
+ $('deskewAngle').value=String(deskew[index]||0);$('deskewValue').textContent=(deskew[index]||0)+'°';
  const page=await viewDoc.getPage(index+1);
  const vp=page.getViewport({scale:1});const scale=Math.min(1.2,900/vp.width);
  const viewport=page.getViewport({scale});
  const c=$('pageCanvas');c.width=Math.ceil(viewport.width);c.height=Math.ceil(viewport.height);
  sheet.style.width=c.width+'px';sheet.style.height=c.height+'px';
  await page.render({canvasContext:c.getContext('2d'),viewport}).promise;
+ c.style.transform='rotate('+(deskew[index]||0)+'deg)';
+ c.style.transformOrigin='center center';
  [...$('thumbs').children].forEach((n,i)=>n.classList.toggle('active',i===index));
  renderItems();
 }
@@ -91,12 +95,53 @@ overlay.addEventListener('pointerup',e=>{
 });
 $('undo').onclick=()=>{if(!items.length)return;items.pop();selected=null;renderItems()};
 $('remove').onclick=()=>{if(!selected)return;items=items.filter(x=>x!==selected);selected=null;renderItems()};
+$('deskewAngle').oninput=e=>{
+ if(!doc)return;
+ const angle=Number(e.target.value);
+ deskew[selectedPage]=angle;
+ $('deskewValue').textContent=angle+'°';
+ $('pageCanvas').style.transform='rotate('+angle+'deg)';
+ status('Vista previa: '+angle+'°. El ajuste se aplicará únicamente a esta página al exportar.');
+};
+$('deskewReset').onclick=()=>{
+ if(!doc)return;
+ deskew[selectedPage]=0;
+ $('deskewAngle').value='0';$('deskewValue').textContent='0°';
+ $('pageCanvas').style.transform='rotate(0deg)';
+};
 $('file').onchange=e=>loadFile(e.target.files[0]);
 $('save').onclick=async()=>{
  if(!doc)return;
  $('save').disabled=true;status('Guardando correcciones…');
  try{
-  const result=await PDFLib.PDFDocument.load(original.slice());
+  // Preserve all untouched pages as PDF. Rasterize only pages explicitly deskewed.
+  const result=await PDFLib.PDFDocument.create();
+  const originalPdf=await PDFLib.PDFDocument.load(original.slice());
+  for(let i=0;i<originalPdf.getPageCount();i++){
+    const angle=Number(deskew[i]||0);
+    if(Math.abs(angle)<.001){
+      const [copied]=await result.copyPages(originalPdf,[i]);result.addPage(copied);
+      continue;
+    }
+    const source=await viewDoc.getPage(i+1);
+    const viewport=source.getViewport({scale:2});
+    const raster=document.createElement('canvas');
+    raster.width=Math.ceil(viewport.width);raster.height=Math.ceil(viewport.height);
+    await source.render({canvasContext:raster.getContext('2d'),viewport}).promise;
+    const rotated=document.createElement('canvas');
+    rotated.width=raster.width;rotated.height=raster.height;
+    const ctx=rotated.getContext('2d');
+    ctx.fillStyle='white';ctx.fillRect(0,0,rotated.width,rotated.height);
+    ctx.translate(rotated.width/2,rotated.height/2);
+    ctx.rotate(angle*Math.PI/180);
+    const scale=Math.min(rotated.width/(Math.abs(raster.width*Math.cos(angle*Math.PI/180))+Math.abs(raster.height*Math.sin(angle*Math.PI/180))),rotated.height/(Math.abs(raster.height*Math.cos(angle*Math.PI/180))+Math.abs(raster.width*Math.sin(angle*Math.PI/180))));
+    ctx.scale(scale,scale);ctx.drawImage(raster,-raster.width/2,-raster.height/2);
+    const image=await result.embedPng(new Uint8Array(await(await fetch(rotated.toDataURL('image/png'))).arrayBuffer()));
+    const originalPage=originalPdf.getPage(i);
+    const width=originalPage.getWidth(),height=originalPage.getHeight();
+    const page=result.addPage([width,height]);
+    page.drawImage(image,{x:0,y:0,width,height});
+  }
   const font=await result.embedFont(PDFLib.StandardFonts.Helvetica);
   for(const item of items){
    const page=result.getPage(item.page),{width,height}=page.getSize();
