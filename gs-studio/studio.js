@@ -36,7 +36,7 @@
     $('toolTitle').textContent = labels[next];
     $('signTools').classList.toggle('hidden', next !== 'sign');
     $('splitTools').classList.toggle('hidden', next !== 'split');
-    $('signResultBtn').classList.toggle('hidden', !(next === 'merge' || next === 'organize') || !pages.length);
+    $('signResultBtn').classList.toggle('hidden', next === 'merge' || !(next === 'organize' && pages.length));
     $('fileInput').multiple = next === 'images' || next === 'merge';
     $('fileInput').accept = next === 'images' ? 'image/png,image/jpeg,.png,.jpg,.jpeg' : '.pdf,.zip,application/pdf,application/zip';
     $('dropFormats').textContent = next === 'images' ? 'Admite JPG y PNG' : 'Admite PDF y ZIP con documentos PDF';
@@ -46,7 +46,8 @@
       ? 'Dibuja tu firma manuscrita o carga su imagen. Pulsa sobre la vista previa para elegir su ubicación.'
       : next === 'split'
       ? 'Abre un PDF y especifica el intervalo de páginas que deseas extraer.'
-      : 'Abre documentos PDF o un ZIP de GS Documentos y organízalos en el orden que necesites.';
+      : next === 'merge' ? 'Cada tarjeta representa un documento completo. Arrastra los archivos para definir el orden final de unión.'
+      : 'Abre documentos PDF o un ZIP de GS Documentos y organiza sus páginas.';
     $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : 'Generar PDF';
     if (retain) render();
   }
@@ -77,6 +78,7 @@
       type: 'pdf', source, index, label: source.name + ' · ' + (index + 1), rotation: 0
     }));
   }
+  function entriesFromSource(source) { return tool === 'merge' ? [{type:'document',source,index:0,label:source.name,rotation:0}] : pagesFromSource(source); }
   async function unpackZip(file) {
     if (!window.JSZip) throw new Error('No se cargó el lector ZIP.');
     const zip = await JSZip.loadAsync(file);
@@ -89,7 +91,7 @@
       const bytes = await zip.file(name).async('uint8array');
       const blob = new Blob([bytes], { type: 'application/pdf' });
       const source = await pdfSource(blob, name);
-      all.push(...pagesFromSource(source));
+      all.push(...entriesFromSource(source));
     }
     return all;
   }
@@ -103,7 +105,7 @@
       } else if (isZip(file.name)) {
         incoming.push(...await unpackZip(file));
       } else if (isPdf(file.name)) {
-        incoming.push(...pagesFromSource(await pdfSource(file, file.name)));
+        incoming.push(...entriesFromSource(await pdfSource(file, file.name)));
       } else {
         throw new Error('Selecciona un PDF o un ZIP de GS Documentos.');
       }
@@ -203,7 +205,7 @@
     const [page] = pages.splice(from, 1);
     pages.splice(to, 0, page);
     render();
-    say('Página movida a la posición ' + (to + 1) + '.');
+    say((tool === 'merge' ? 'Documento' : 'Página') + ' movido a la posición ' + (to + 1) + '.');
   }
   function setupDrag(card, index) {
     // Pointer Events works with mouse, stylus and touch, with no extra library.
@@ -248,7 +250,7 @@
     pages.forEach((entry, index) => {
       const card = document.createElement('article'); card.className = 'page';
       const canvas = document.createElement('canvas'); card.append(canvas);
-      const caption = document.createElement('div'); caption.textContent = (index + 1) + '. ' + entry.label; card.append(caption);
+      const caption = document.createElement('div'); caption.textContent = (index + 1) + '. ' + entry.label + (entry.type === 'document' ? ' · ' + entry.source.doc.getPageCount() + ' página(s)' : ''); card.append(caption);
       const nav = document.createElement('nav');
       const add = (label, title, action, disabled = false) => {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
@@ -257,7 +259,7 @@
       if (entry.type === 'pdf') add('↻', 'Girar 90°', () => { entry.rotation = (entry.rotation + 90) % 360; render(); });
       add('×', 'Eliminar de la selección', () => { pages.splice(index, 1); render(); });
       card.append(nav); host.append(card); drawPagePreview(entry, canvas);
-      if (tool !== 'sign') { card.title = 'Arrastra esta página a otra posición'; setupDrag(card, index); }
+      if (tool !== 'sign') { card.title = tool === 'merge' ? 'Arrastra el documento completo para cambiar su orden' : 'Arrastra esta página a otra posición'; setupDrag(card, index); }
       if (tool === 'sign' && entry.type === 'pdf') {
         card.classList.add('sign-target');
         canvas.title = 'Haz clic para ubicar la firma en esta página';
@@ -277,10 +279,10 @@
       }
     });
     $('exportBtn').disabled = !pages.length;
-    $('signResultBtn').classList.toggle('hidden', !(tool === 'merge' || tool === 'organize') || !pages.length);
+    $('signResultBtn').classList.toggle('hidden', tool === 'merge' || !(tool === 'organize' && pages.length));
     $('signPage').max = String(pages.length);
     $('rangeEnd').value = String(pages.length || 1);
-    say(pages.length + ' página(s) preparadas.');
+    say(pages.length + (tool === 'merge' ? ' documento(s) listos para unir.' : ' página(s) preparadas.'));
   }
   let drawing = false;
   const coordinates = event => {
@@ -463,7 +465,13 @@
         selected = pages.slice(start - 1, end);
       }
       const output = await PDFLib.PDFDocument.create();
-      for (const page of selected) await appendPage(output, page);
+      for (const entry of selected) {
+        if (entry.type === 'document') {
+          const indices = entry.source.doc.getPageIndices();
+          const copied = await output.copyPages(entry.source.doc, indices);
+          copied.forEach(page => output.addPage(page));
+        } else await appendPage(output, entry);
+      }
       if (tool === 'sign') {
         const number = Number($('signPage').value);
         if (!Number.isInteger(number) || number < 1 || number > selected.length)
