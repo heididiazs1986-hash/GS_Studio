@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GS Studio · Gestión documental</title>
+<style>
+:root{font-family:Manrope,system-ui,Arial,sans-serif;color:#1d2736;background:#f7f8fa}*{box-sizing:border-box}
+body{margin:0}header{background:white;border-bottom:1px solid #dce1e7;padding:17px max(22px,calc((100vw - 1120px)/2));display:flex;align-items:center;gap:12px}
+.logo{background:#ff6900;color:white;border-radius:12px;padding:13px;font-weight:800}.subtitle,small{color:#64748b}h1{margin:0;font-size:25px}h2{font-size:20px}
+main{max-width:1120px;margin:30px auto;padding:0 18px}.hero,.panel{background:white;border:1px solid #d6dde6;border-radius:18px;padding:25px;margin-bottom:20px}
+.hero{display:flex;justify-content:space-between;gap:20px;align-items:center}.orange{color:#f60;font-weight:800;font-size:12px;letter-spacing:.09em}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:13px}.tile{background:white;border:1px solid #d6dde6;border-radius:15px;padding:18px;text-align:left;cursor:pointer;color:inherit;font:inherit}
+.tile:hover,.tile:focus{border-color:#f60;outline:2px solid #ffe0c8}.tile b{display:block;margin:8px 0}.tile small{display:block;line-height:1.5}
+button.primary,.link{background:#ff6900;color:white;border:0;border-radius:10px;padding:12px 18px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block}
+button.secondary{background:white;color:#223;border:1px solid #ccd3de;border-radius:10px;padding:10px 14px;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:15px 0}
+.dropzone{border:2px dashed #bdc9d8;border-radius:15px;padding:28px 18px;display:flex;flex-direction:column;gap:8px;align-items:center;text-align:center;background:#fbfcfe;cursor:pointer;margin:18px 0;transition:background .15s,border-color .15s}.dropzone:hover,.dropzone.drag-over,.dropzone:focus-within{border-color:#ff6900;background:#fff1e6}.dropzone strong{font-size:17px}.dropzone small{font-size:13px}.dropzone input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.drop-symbol{font-size:28px;color:#ff6900}.hidden{display:none}.pages{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;margin:14px 0}
+.page{border:1px solid #d5dce5;border-radius:12px;padding:9px;background:#fbfcfe}.page canvas{width:100%;height:auto;max-height:180px;object-fit:contain}
+.page div{font-size:12px;word-break:break-word}.page nav{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.page nav button{cursor:pointer}
+#signCanvas{touch-action:none;border:1px dashed #8b95a4;border-radius:10px;background:white;max-width:100%;width:420px;height:155px}
+#message{min-height:24px;color:#344255}label{font-weight:600}input[type=number]{width:75px;padding:8px}#editorFrame{border:1px solid #d6dde6;border-radius:12px;width:100%;height:780px;display:block;background:white}#editorWorkspace .toolbar{justify-content:flex-start}.page.sign-target{cursor:crosshair;border-color:#ff6900}.page.sign-target:hover{box-shadow:0 0 0 2px #ffd2ad}.note{font-size:12px;color:#64748b}
+.signature-options button{flex:1;min-width:145px}.signature-options{margin-bottom:12px}
+.signature-editor{border:1px solid #bdc9d8;padding:15px;border-radius:13px;margin:12px 0;background:#fafbfc}
+.signature-preview-frame{max-width:100%;overflow:hidden;margin:10px 0;background:linear-gradient(45deg,#e3e7ed 25%,transparent 25%) 0 0/20px 20px,linear-gradient(45deg,transparent 75%,#e3e7ed 75%) 0 0/20px 20px,#fff}
+#signatureCrop{display:block;width:100%;height:auto;max-height:360px;touch-action:none;cursor:crosshair}
+.signature-editor input[type=range]{width:140px}.signature-editor label{display:flex;align-items:center;gap:8px}
+@media(max-width:750px){.signature-editor .toolbar{flex-direction:column;align-items:stretch}.signature-editor .toolbar button{width:100%}}
+/* Responsive UI: desktop, tablet and phone */
+:root{--gs-orange:#ff6900;--gs-blue:#245881;--gs-gray:#64748b}
+.hero{align-items:flex-start}.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tile{min-height:126px}.tile:focus-visible,.dropzone:focus-within{outline:3px solid var(--gs-blue);outline-offset:2px}
+.page nav button{min-width:34px;min-height:34px;border:1px solid #b8c7d7;border-radius:7px;background:white}
+#signTools .toolbar label,#splitTools label{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+#signCanvas{display:block;aspect-ratio:840/310;height:auto;touch-action:none}
+@media(max-width:750px){
+ header{padding:13px 16px}
+ main{margin:14px auto;padding:0 12px}
+ .hero,.panel{padding:18px;border-radius:15px;margin-bottom:14px}
+ .hero h1{font-size:21px;line-height:1.25}
+ .subtitle{font-size:13px;line-height:1.5}
+ .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
+ .tile{padding:14px;min-height:122px}
+ .tile b{font-size:14px}
+ .tile small{font-size:12px;line-height:1.4}
+ .dropzone{padding:26px 12px}
+ .pages{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .toolbar{gap:9px}
+ button.primary,button.secondary{min-height:44px}
+ #exportBtn{width:100%}
+ #signTools .toolbar label,#splitTools label{font-size:13px}
+ input[type=number]{min-height:42px;width:82px}
+ #editorFrame{height:72vh;min-height:490px}
+}
+@media(max-width:380px){
+ .tiles{gap:8px}.tile{padding:11px;min-height:125px}
+ .pages{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .page{padding:6px}
+}
+@media(hover:none){
+ .tile:hover{outline:none}
+ .dropzone:hover{background:#fbfcfe;border-color:#bdc9d8}
+}
+</style></head>
+<body><header><div class="logo">GS</div><div><strong>GS Studio</strong><div class="subtitle">Centro de gestión documental · Procesamiento en el navegador</div></div></header>
+<main><section class="hero"><div><span class="orange">GESTIÓN DOCUMENTAL</span><h1>Todos tus documentos en un solo lugar.</h1><p class="subtitle">Sin subir tus archivos a nuestros servidores. Conservamos los originales.</p></div></section>
+<section class="tiles" aria-label="Herramientas">
+<button class="tile" data-tool="merge">📚<b>Unir PDF</b><small>Combina documentos y organiza las páginas</small></button>
+<button class="tile" data-tool="images">🖼️<b>Imágenes a PDF</b><small>Convierte JPG y PNG</small></button>
+<button class="tile" data-tool="organize">🗂️<b>Organizar PDF</b><small>Reordena, gira y elimina páginas</small></button>
+<button class="tile" data-tool="split">✂️<b>Dividir PDF</b><small>Extrae páginas por rango</small></button>
+<button class="tile" data-tool="sign">✍️<b>Firmar PDF</b><small>Firma manuscrita visual, sin certificado digital</small></button>
+<button class="tile" data-tool="editor">📝<b>GS Editor</b><small>Abre y corrige paquetes de GS Documentos sin alterar su motor</small></button>
+</section>
+<section class="panel hidden" id="editorWorkspace"><div class="toolbar"><button class="secondary" id="backToPdf" type="button">← Volver a herramientas PDF</button></div><h2>GS Editor · Corrección de paquetes</h2><p class="subtitle">Corrige los datos y pulsa «Generar ZIP corregido». El ZIP se descargará normalmente y sus PDF pasarán a GS Studio para que puedas organizarlos, unirlos y firmarlos. Los soportes siguen únicamente en el ZIP.</p><iframe id="editorFrame" title="Editor de paquetes GS Documentos" src="../editor-pc/index.html" loading="lazy"></iframe></section><section class="panel" id="workspace"><span class="orange">HERRAMIENTA ACTIVA</span><h2 id="toolTitle">Unir PDF</h2>
+<p id="toolHint" class="subtitle">Selecciona los archivos que deseas trabajar.</p>
+<label class="dropzone" id="fileDropzone" for="fileInput"><span class="drop-symbol" aria-hidden="true">⇧</span><strong>Arrastra tus archivos aquí</strong><small>o toca aquí para seleccionarlos desde tu dispositivo</small><small id="dropFormats">Admite PDF y ZIP con documentos PDF</small><input id="fileInput" type="file" multiple accept="application/pdf,.pdf"></label>
+<div id="controls" class="toolbar"><button class="secondary" id="clearBtn">Limpiar selección</button><button class="secondary hidden" id="signResultBtn" type="button">✍️ Firmar el resultado</button></div>
+<div id="pages" class="pages"></div>
+<div id="signTools" class="hidden"><p><label>Firma manuscrita visual</label> · elige cómo agregarla</p>
+<div class="toolbar signature-options"><button class="secondary" type="button" id="drawSignBtn">Dibujar firma</button><button class="secondary" type="button" id="uploadSignBtn">Cargar imagen</button><button class="secondary" type="button" id="cameraSignBtn">Tomar foto</button></div>
+<canvas id="signCanvas" width="840" height="310" aria-label="Área para dibujar firma"></canvas>
+<input type="file" id="signatureImage" accept="image/png,image/jpeg,.png,.jpg,.jpeg" class="hidden" aria-label="Cargar imagen de firma">
+<input type="file" id="signatureCamera" accept="image/*" capture="environment" class="hidden" aria-label="Tomar foto de firma">
+<p id="signatureSource" class="subtitle" role="status">Dibuja con el dedo, lápiz o mouse; también puedes elegir una imagen o una fotografía.</p>
+<div id="signatureEditor" class="hidden signature-editor">
+  <strong>Preparar imagen de firma</strong>
+  <p class="subtitle">Arrastra los bordes del recuadro sobre la imagen para recortar. Puedes mantener el fondo original o retirar el blanco.</p>
+  <div class="signature-preview-frame"><canvas id="signatureCrop" width="720" height="360" aria-label="Vista previa para recortar firma"></canvas></div>
+  <div class="toolbar"><label><input type="checkbox" id="removeWhite" checked> Quitar fondo blanco</label><label>Sensibilidad <input type="range" id="whiteTolerance" min="8" max="75" value="30"></label></div>
+  <div class="toolbar"><button class="primary" type="button" id="applySignatureCrop">Usar firma preparada</button><button class="secondary" type="button" id="cancelSignatureCrop">Cancelar</button></div>
+  <p id="cropFeedback" class="subtitle" role="status"></p>
+</div>
+<div class="toolbar"><button class="secondary" id="clearSign">Borrar firma</button><label>Página <input type="number" id="signPage" min="1" value="1"></label><label>X (pt) <input type="number" id="signX" value="60"></label><label>Y (pt, desde abajo) <input type="number" id="signY" value="70"></label><label>Ancho (pt) <input type="number" id="signWidth" min="30" value="150"></label></div>
+<p class="subtitle">Pulsa sobre la vista previa de una página para ubicar la firma, o ajusta las coordenadas. Antes de guardar, verifica que la fotografía muestre solamente tu firma.</p></div>
+<div id="splitTools" class="hidden toolbar"><label>Desde <input type="number" id="rangeStart" value="1" min="1"></label><label>Hasta <input type="number" id="rangeEnd" value="1" min="1"></label></div>
+<div class="toolbar"><button class="primary" id="exportBtn" disabled>Generar PDF</button></div><p role="status" id="message"></p>
+</section></main>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="./studio.js"></script>
+</body></html>
