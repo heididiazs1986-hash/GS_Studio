@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id);
 let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={};
 const sheet=$('sheet'),overlay=$('overlay'),status=s=>{$('status').textContent=s};
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+$('textSettings').style.display='none';
 const current=()=>items.filter(x=>x.page===selectedPage);
 function add(item){items.push(item);selected=item;renderItems();$('save').disabled=false}
 function xy(e){const r=overlay.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))}}
@@ -62,6 +63,7 @@ function renderItems(){
 }
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
  mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));
+ $('textSettings').style.display=mode==='text'?'block':'none';
  status(mode==='whiteout'?'Arrastra para cubrir el área incorrecta. Esta cobertura no sirve para censurar datos confidenciales.':mode==='text'?'Haz clic en la página para insertar el texto.':'Arrastra los elementos para ajustar su posición.');
 });
 overlay.addEventListener('pointerdown',e=>{
