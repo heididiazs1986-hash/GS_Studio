@@ -1,21 +1,74 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Editar PDF · GS Studio</title>
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ff6900"><title>Editar PDF · GS Studio</title>
 <style>
-:root{font-family:Manrope,system-ui,sans-serif;color:#172438;background:#f5f7fa}*{box-sizing:border-box}body{margin:0}
-header{background:#fff;border-bottom:1px solid #d9e1ec;padding:16px max(18px,calc((100vw - 1180px)/2));display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-header a{color:#245881;text-decoration:none;font-weight:700}header strong{font-size:22px}
-main{max-width:1200px;margin:20px auto;padding:0 15px}button{font:inherit;border:1px solid #cad6e3;border-radius:9px;padding:10px 13px;background:white;cursor:pointer;min-height:42px}button.active{background:#245881;color:white}button.primary{background:#ff6900;color:white;border:0;font-weight:800}button:disabled{opacity:.5;cursor:not-allowed}
-.panel{background:white;border:1px solid #d9e1ec;border-radius:16px;padding:17px;margin-bottom:15px}
-.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.tools label{display:inline-flex;align-items:center;gap:6px;font-size:13px}.tools input{max-width:110px;padding:8px;border:1px solid #ccd6e2;border-radius:7px}
-#file{max-width:100%}.workspace{display:grid;grid-template-columns:minmax(145px,220px) minmax(0,1fr);gap:16px}.side{max-height:75vh;overflow:auto}
-.thumb{display:block;width:100%;padding:10px;margin-bottom:8px;text-align:left}.thumb.active{background:#eef5fc;border-color:#245881}.thumb canvas{display:block;max-width:100%;margin:auto}.thumb span{display:block;text-align:center;font-size:12px;margin-top:5px}
-.viewer{min-width:0;background:#ecf0f5;overflow:auto;max-height:78vh;padding:14px}.sheet{position:relative;width:max-content;max-width:100%;margin:auto;box-shadow:0 4px 16px #0002;background:white}.sheet canvas{display:block;max-width:100%;height:auto}.overlay{position:absolute;inset:0;touch-action:none;cursor:crosshair}.edit-item{position:absolute;box-sizing:border-box;outline:1px dashed #245881;white-space:pre-wrap;overflow:hidden;pointer-events:auto;cursor:move}.edit-item.whiteout{background:white}.edit-item.text{font-family:Helvetica,Arial,sans-serif}.edit-item.selected{outline:2px solid #ff6900}.tools input[type=range]{width:130px;max-width:130px;accent-color:#ff6900}#deskewValue{font-size:13px;min-width:35px;color:#245881;font-weight:700}
-.hint{color:#667991;font-size:13px}#status{min-height:20px;color:#245881}
-@media(max-width:650px){.workspace{grid-template-columns:1fr}.side{display:flex;gap:8px;max-height:125px;overflow-x:auto}.thumb{min-width:110px;width:110px}.viewer{max-height:62vh;padding:8px}.tools button{flex:1}.panel{padding:12px}}
-</style></head><body><header><a href="../gs-studio/">← GS Studio</a><div><strong>Editar PDF</strong><div class="hint">Correcciones visuales de documentos, incluso escaneados</div></div></header><main>
-<section class="panel"><input id="file" type="file" accept=".pdf,application/pdf"><p class="hint">Los originales se conservan. Enderezar un escaneo convierte la página corregida en imagen y puede eliminar texto seleccionable, formularios o enlaces de esa página. Las coberturas visuales no sirven para censurar información confidencial.</p></section>
-<section class="panel"><div class="tools">
-<button data-mode="select" class="active">Seleccionar / mover</button><button data-mode="whiteout">Cubrir zona</button><button data-mode="text">Agregar texto</button>
-<label>Texto <input id="textValue" value="CORRECCIÓN" aria-label="Texto a insertar"></label><label>Tamaño <input id="fontSize" type="number" value="16" min="6" max="72"></label>
-<label>Enderezar (°) <input id="deskewAngle" type="range" min="-8" max="8" step="0.25" value="0" disabled></label><output id="deskewValue">0°</output><button id="deskewReset" disabled>Restablecer giro</button><button id="undo">Deshacer</button><button id="remove">Eliminar selección</button><button class="primary" id="save" disabled>Guardar PDF corregido</button></div><p id="status" role="status"></p></section>
-<section class="workspace"><aside class="panel side" id="thumbs" aria-label="Páginas"></aside><div class="panel viewer"><div class="sheet" id="sheet"><canvas id="pageCanvas"></canvas><div id="overlay" class="overlay"></div></div></div></section>
-</main><script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="./editor.js"></script></body></html>
+:root{font-family:Manrope,"Segoe UI",system-ui,sans-serif;--orange:#ff6900;--blue:#245881;--navy:#192a3c;--muted:#60758c;--line:#d7e1ed;background:#f3f6fa;color:var(--navy)}
+*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer}
+header{background:white;border-bottom:1px solid var(--line);padding:14px max(20px,calc((100vw - 1380px)/2));display:flex;align-items:center;gap:15px}
+header a{text-decoration:none;color:var(--blue);font-size:14px;font-weight:700;white-space:nowrap}
+header strong{font-size:23px;letter-spacing:-.5px}.eyebrow{font-size:11px;letter-spacing:.12em;font-weight:800;color:var(--orange);text-transform:uppercase}
+.hint{color:var(--muted);font-size:12px;line-height:1.5}main{max-width:1400px;padding:18px 18px 28px;margin:auto}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 3px 14px rgba(24,50,76,.035)}
+.top-row{padding:15px 19px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:13px}
+.top-row h1{font-size:19px;line-height:1.2;margin:4px 0}.top-row p{margin:3px 0}
+input[type=file]{font-size:12px;max-width:100%}
+.primary{background:var(--orange);color:white;border:1px solid var(--orange);font-weight:800}
+button{background:white;border:1px solid #cbd8e8;color:#223852;border-radius:9px;padding:9px 12px;min-height:41px;transition:background .15s,border-color .15s}
+button:hover:not(:disabled){background:#f3f8fd;border-color:#8caecb}button.primary:hover:not(:disabled){background:#e75e00;color:white}
+button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:disabled{opacity:.5;cursor:not-allowed}
+.editor-layout{display:grid;grid-template-columns:205px minmax(0,1fr) 260px;gap:12px;align-items:start}
+.sidebar{padding:14px;min-height:590px}.sidebar h2{font-size:13px;margin:5px 0 12px;color:var(--blue)}
+.sidebar-pages{position:sticky;top:10px;max-height:85vh;overflow:auto}.sidebar-tools{position:sticky;top:10px}
+.thumb{display:block;width:100%;padding:10px;margin-bottom:8px;text-align:center;border-radius:10px}
+.thumb.active{background:#ecf4fc;border:2px solid var(--blue)}.thumb canvas{max-width:100%;display:block;margin:auto;border:1px solid #ebeff4}
+.thumb span{display:block;margin-top:6px;font-size:12px;font-weight:700}
+.viewer-panel{overflow:hidden;min-width:0}.viewer-head{padding:11px 15px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.viewer-head strong{font-size:13px}.viewer{padding:23px 18px;background:#e8edf4;min-width:0;overflow:auto;height:75vh;min-height:530px}
+.sheet{position:relative;margin:auto;width:max-content;max-width:100%;background:white;box-shadow:0 8px 27px #21374c30}
+.sheet canvas{display:block;max-width:100%;height:auto}.overlay{position:absolute;inset:0;touch-action:none;cursor:crosshair}
+.edit-item{position:absolute;outline:1px dashed var(--blue);white-space:pre-wrap;overflow:hidden;pointer-events:auto;cursor:move}
+.edit-item.whiteout{background:white}.edit-item.text{font-family:Helvetica,Arial,sans-serif}.edit-item.selected{outline:2px solid var(--orange)}
+.tool-stack{display:grid;gap:8px}.tool-stack button{text-align:left;font-weight:650}
+.tool-icon{color:var(--orange);display:inline-block;min-width:25px;font-size:17px}
+.settings{margin-top:17px;border-top:1px solid var(--line);padding-top:13px}.settings h3{font-size:13px;color:var(--blue);margin:0 0 10px}
+.field{display:grid;gap:5px;margin-bottom:12px}.field label{font-size:12px;font-weight:700}.field input{border:1px solid #cbd8e8;border-radius:8px;padding:9px;min-width:0;width:100%;background:white}
+.field input[type=range]{padding:0;accent-color:var(--orange)}
+.field-row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+#deskewValue{font-size:13px;font-weight:800;color:var(--blue)}#deskewReset{width:100%}
+.action-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.action-row button{font-size:12px}.save-button{width:100%;margin-top:14px}
+#status{font-size:12px;color:var(--blue);background:#eef5fc;padding:10px;border-radius:8px;line-height:1.5;min-height:43px;margin-top:13px}
+.help-text{margin:12px 0 0;font-size:11px;color:var(--muted);line-height:1.5}
+.editor-layout.is-empty .viewer{display:flex;justify-content:center;align-items:center}
+@media(max-width:1050px){.editor-layout{grid-template-columns:150px minmax(0,1fr)}.sidebar-tools{grid-column:1/-1;position:static;min-height:0}.tool-stack{grid-template-columns:repeat(3,1fr)}.settings{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings h3{grid-column:1/-1}}
+@media(max-width:650px){main{padding:10px}.top-row{padding:13px}.editor-layout{grid-template-columns:minmax(0,1fr)}.sidebar{min-height:0;padding:12px}.sidebar-pages{max-height:168px;position:static}.sidebar-pages #thumbs{display:flex;gap:8px;overflow-x:auto}.thumb{min-width:106px;width:106px}.viewer{height:60vh;min-height:340px;padding:9px}.sidebar-tools{grid-column:auto}.tool-stack{grid-template-columns:1fr 1fr}.settings{display:block}.viewer-head{padding:10px}.save-button{min-height:49px}}
+</style></head>
+<body>
+<header><a href="../gs-studio/">← GS Studio</a><div><div class="eyebrow">Centro de gestión documental - Gestión Social</div><strong>Editar PDF</strong></div></header>
+<main>
+<section class="panel top-row"><div><div class="eyebrow">Editor documental</div><h1>Corrige tus documentos con precisión</h1><p class="hint">Añade texto, cubre zonas y endereza escaneos sin modificar el original.</p></div><div><label class="hint" for="file">Abrir documento PDF</label><div><input id="file" type="file" accept=".pdf,application/pdf"></div></div></section>
+<div class="editor-layout">
+<aside class="panel sidebar sidebar-pages"><h2>PÁGINAS DEL DOCUMENTO</h2><div id="thumbs" aria-label="Páginas"></div></aside>
+<section class="panel viewer-panel">
+<div class="viewer-head"><strong>Vista del documento</strong><span class="hint">Selecciona una herramienta y trabaja sobre la página</span></div>
+<div class="viewer"><div class="sheet" id="sheet"><canvas id="pageCanvas"></canvas><div id="overlay" class="overlay"></div></div></div>
+</section>
+<aside class="panel sidebar sidebar-tools">
+<h2>HERRAMIENTAS DE EDICIÓN</h2>
+<div class="tool-stack">
+<button data-mode="select" class="active"><span class="tool-icon">↔</span> Seleccionar / mover</button>
+<button data-mode="whiteout"><span class="tool-icon">▧</span> Cubrir zona</button>
+<button data-mode="text"><span class="tool-icon">T</span> Agregar texto</button>
+</div>
+<div class="settings" id="textSettings"><h3>Configurar texto</h3>
+<div class="field"><label for="textValue">Contenido</label><input id="textValue" value="CORRECCIÓN"></div>
+<div class="field"><label for="fontSize">Tamaño de letra</label><input id="fontSize" type="number" value="16" min="6" max="72"></div></div>
+<div class="settings"><h3>Enderezar escaneo</h3>
+<div class="field"><div class="field-row"><label for="deskewAngle">Inclinación</label><output id="deskewValue">0°</output></div><input id="deskewAngle" type="range" min="-8" max="8" step="0.25" value="0" disabled></div>
+<button id="deskewReset" disabled>Restablecer inclinación</button>
+</div>
+<div class="settings"><h3>Historial de edición</h3><div class="action-row"><button id="undo">↶ Deshacer</button><button id="remove">Eliminar elemento</button></div></div>
+<button class="primary save-button" id="save" disabled>Guardar PDF corregido</button>
+<p id="status" role="status">Abre un PDF para comenzar.</p>
+<p class="help-text">Los originales se conservan. El enderezado convierte en imagen las páginas corregidas. Cubrir zonas no elimina información confidencial de forma segura.</p>
+</aside></div></main>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="./editor.js"></script></body></html>
