@@ -26,8 +26,8 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 .viewer-head strong{font-size:13px}.viewer{padding:23px 18px;background:#e8edf4;min-width:0;overflow:auto;height:75vh;min-height:530px}
 .sheet{position:relative;margin:auto;width:max-content;max-width:100%;background:white;box-shadow:0 8px 27px #21374c30}
 .sheet canvas{display:block;max-width:100%;height:auto}.overlay{position:absolute;inset:0;touch-action:none;cursor:crosshair}
-.edit-item{position:absolute;outline:1px dashed var(--blue);white-space:pre-wrap;overflow:hidden;pointer-events:auto;cursor:move}
-.edit-item.whiteout{background:white}.edit-item.text{font-family:Helvetica,Arial,sans-serif}.edit-item.selected{outline:2px solid var(--orange)}
+.edit-item{position:absolute;outline:none;white-space:pre-wrap;overflow:hidden;pointer-events:auto;cursor:move}
+.edit-item.whiteout{background:var(--cover-color,#fff);outline:none}.edit-item.text{font-family:Helvetica,Arial,sans-serif}.edit-item.selected:not(.whiteout){outline:2px solid var(--orange)}.edit-item.whiteout.selected{outline:none}
 .tool-stack{display:grid;gap:8px}.tool-stack button{text-align:left;font-weight:650}
 .tool-icon{color:var(--orange);display:inline-block;min-width:25px;font-size:17px}
 .settings{margin-top:17px;border-top:1px solid var(--line);padding-top:13px}.settings h3{font-size:13px;color:var(--blue);margin:0 0 10px}
@@ -59,6 +59,7 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 <button data-mode="whiteout"><span class="tool-icon">▧</span> Cubrir zona</button>
 <button data-mode="text"><span class="tool-icon">T</span> Agregar texto</button>
 </div>
+<div class="settings" id="coverSettings"><h3>Color de cobertura</h3><div class="field"><label for="coverColor">Color de la hoja</label><input type="color" id="coverColor" value="#ffffff"></div><button id="sampleCover" type="button">Tomar color del documento</button><p class="help-text">Toca una zona limpia de la hoja para copiar su color. La cobertura no tendrá borde.</p></div>
 <div class="settings" id="textSettings"><h3>Configurar texto</h3>
 <div class="field"><label for="textValue">Contenido</label><input id="textValue" value="CORRECCIÓN"></div>
 <div class="field"><label for="fontSize">Tamaño de letra</label><input id="fontSize" type="number" value="16" min="6" max="72"></div></div>
