@@ -27,6 +27,9 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 :root{--gs-orange:#ff6900;--gs-blue:#245881;--gs-gray:#64748b}
 .hero{align-items:flex-start}.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
 .tile{min-height:126px}.tile:focus-visible,.dropzone:focus-within{outline:3px solid var(--gs-blue);outline-offset:2px}
+.page{position:relative}.page:not(.sign-target) canvas,.page:not(.sign-target)>div{cursor:grab;touch-action:none;user-select:none}
+.page.dragging-page{opacity:.55;border:2px solid #245881;background:#edf5ff;z-index:2}
+.page.drop-target{border:2px dashed #ff6900;background:#fff3e7;box-shadow:0 0 0 3px #ffdcc6}
 .page nav button{min-width:34px;min-height:34px;border:1px solid #b8c7d7;border-radius:7px;background:white}
 #signTools .toolbar label,#splitTools label{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 #signCanvas{display:block;aspect-ratio:840/310;height:auto;touch-action:none}
