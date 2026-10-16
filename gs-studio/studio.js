@@ -197,6 +197,52 @@
       if (canvas.isConnected) canvas.replaceWith(span);
     });
   }
+  let drag = null;
+  function reorder(from, to) {
+    if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) return;
+    const [page] = pages.splice(from, 1);
+    pages.splice(to, 0, page);
+    render();
+    say('Página movida a la posición ' + (to + 1) + '.');
+  }
+  function setupDrag(card, index) {
+    // Pointer Events works with mouse, stylus and touch, with no extra library.
+    const clearTargets = () => document.querySelectorAll('#pages .drop-target').forEach(el => el.classList.remove('drop-target'));
+    card.dataset.pageIndex = String(index);
+    card.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.target.closest('button,input')) return;
+      drag = { from: index, to: index, startX: event.clientX, startY: event.clientY, moving: false, pointerId: event.pointerId };
+      card.setPointerCapture(event.pointerId);
+    });
+    card.addEventListener('pointermove', event => {
+      if (!drag || drag.pointerId !== event.pointerId || drag.from !== index) return;
+      if (!drag.moving && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 9) return;
+      drag.moving = true;
+      card.classList.add('dragging-page');
+      clearTargets();
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('#pages .page');
+      if (target) {
+        drag.to = Number(target.dataset.pageIndex);
+        if (target !== card) target.classList.add('drop-target');
+      }
+      // Scrolling near the edge of the viewport for long multi-page documents.
+      if (event.clientY > innerHeight - 65) window.scrollBy(0, 18);
+      else if (event.clientY < 65) window.scrollBy(0, -18);
+    });
+    function finish(event) {
+      if (!drag || drag.pointerId !== event.pointerId || drag.from !== index) return;
+      const from = drag.from, to = drag.to, moved = drag.moving;
+      drag = null;
+      card.classList.remove('dragging-page');
+      clearTargets();
+      if (moved && event.type === 'pointerup') reorder(from, to);
+    }
+    card.addEventListener('pointerup', finish);
+    card.addEventListener('pointercancel', finish);
+    card.addEventListener('lostpointercapture', () => {
+      if (drag?.from === index) { drag = null; card.classList.remove('dragging-page'); clearTargets(); }
+    });
+  }
   function render() {
     const host = $('pages'); host.replaceChildren();
     pages.forEach((entry, index) => {
@@ -208,11 +254,10 @@
         const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
         button.title = title; button.disabled = disabled; button.addEventListener('click', action); nav.append(button);
       };
-      add('←', 'Mover a la izquierda', () => move(index, -1), index === 0);
-      add('→', 'Mover a la derecha', () => move(index, 1), index === pages.length - 1);
       if (entry.type === 'pdf') add('↻', 'Girar 90°', () => { entry.rotation = (entry.rotation + 90) % 360; render(); });
       add('×', 'Eliminar de la selección', () => { pages.splice(index, 1); render(); });
       card.append(nav); host.append(card); drawPagePreview(entry, canvas);
+      if (tool !== 'sign') { card.title = 'Arrastra esta página a otra posición'; setupDrag(card, index); }
       if (tool === 'sign' && entry.type === 'pdf') {
         card.classList.add('sign-target');
         canvas.title = 'Haz clic para ubicar la firma en esta página';
@@ -237,13 +282,6 @@
     $('rangeEnd').value = String(pages.length || 1);
     say(pages.length + ' página(s) preparadas.');
   }
-  function move(index, delta) {
-    const next = index + delta;
-    if (next < 0 || next >= pages.length) return;
-    [pages[index], pages[next]] = [pages[next], pages[index]];
-    render();
-  }
-
   let drawing = false;
   const coordinates = event => {
     const rect = signature.getBoundingClientRect();
