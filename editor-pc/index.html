@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b4f7c">
+  <title>GS Documentos · Editor PC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Open+Sans:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./editor.css?v=pr1-fixes">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="brand">GS Documentos</div>
+    <div class="subbrand">Editor PC · Control de calidad documental</div>
+  </div>
+  <div class="status-pill" id="statusPill">Sin ZIP abierto</div>
+</header>
+
+<main class="shell">
+  <section class="hero card" id="openCard">
+    <div>
+      <span class="eyebrow">EDITOR DE PAQUETES</span>
+      <h1>Corrige una vez. Actualiza todos los documentos.</h1>
+      <p>Abre un ZIP generado por GS Documentos, revisa los datos comunes y corrige cualquier campo de E1, E6, AR, DJ, RETIE, EC o TD sin modificar el archivo original.</p>
+    </div>
+    <label class="dropzone" id="dropzone">
+      <input id="zipInput" type="file" accept=".zip,application/zip" hidden>
+      <span class="drop-icon">⌑</span>
+      <strong>Abrir ZIP</strong>
+      <small>Arrastra el paquete aquí o haz clic para seleccionarlo</small>
+    </label>
+  </section>
+
+  <section class="workspace hidden" id="workspace">
+    <aside class="card master-panel">
+      <div class="panel-head">
+        <div>
+          <span class="eyebrow">DATOS MAESTROS</span>
+          <h2>Registro general</h2>
+        </div>
+        <span class="legacy-badge" id="legacyBadge">ZIP legado</span>
+      </div>
+      <p class="hint">Los cambios hechos aquí se replican en los documentos relacionados. Los campos siguen siendo editables aunque hayan venido de TXT.</p>
+      <div class="master-grid" id="masterGrid"></div>
+
+      <div class="signature-note">
+        <strong>Firmas</strong>
+        <span>En esta primera versión se conservan exactamente las firmas originales del ZIP. El reemplazo de firma se integrará sobre los mismos campos de firma de los PDF.</span>
+      </div>
+
+      <div class="action-stack">
+        <button class="btn primary" id="saveZipBtn">Generar ZIP corregido</button>
+        <button class="btn secondary" id="resetBtn">Cerrar paquete</button>
+      </div>
+    </aside>
+
+    <section class="card docs-panel">
+      <div class="docs-head">
+        <div>
+          <span class="eyebrow">DOCUMENTOS DEL ZIP</span>
+          <h2 id="packageTitle">Paquete abierto</h2>
+        </div>
+        <div class="summary" id="summary"></div>
+      </div>
+      <div class="doc-tabs" id="docTabs"></div>
+      <div class="doc-toolbar">
+        <div>
+          <strong id="docTitle">Documento</strong>
+          <span id="docMeta"></span>
+        </div>
+        <span class="editor-scope-note">Solo datos diligenciados por GS Documentos · casillas internas conservadas sin cambios</span>
+      </div>
+      <div class="field-list" id="docFields"></div>
+    </section>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="./editor.js?v=pr1-fixes"></script>
+</body>
+</html>
