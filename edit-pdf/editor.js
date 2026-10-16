@@ -15,13 +15,25 @@ async function loadFile(file){
   viewDoc=await pdfjsLib.getDocument({data:original.slice()}).promise;
   items=[];selected=null;selectedPage=0;deskew={};zoom=1;
   $('thumbs').replaceChildren();
+  // Build page buttons immediately. Render preview only once a thumbnail approaches view.
+  if(window.__gsThumbnailObserver)window.__gsThumbnailObserver.disconnect();
+  const observer=new IntersectionObserver(entries=>{
+   for(const entry of entries){
+    if(!entry.isIntersecting)continue;
+    const btn=entry.target;observer.unobserve(btn);
+    (async()=>{
+     const i=Number(btn.dataset.index),p=await viewDoc.getPage(i+1),vp=p.getViewport({scale:.16});
+     const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);
+     await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+     if(btn.isConnected)btn.prepend(c);
+    })().catch(err=>console.warn('Miniatura no disponible',err));
+   }
+  },{root:$('thumbs').parentElement,rootMargin:'140px'});
+  window.__gsThumbnailObserver=observer;
   for(let i=0;i<viewDoc.numPages;i++){
-   const p=await viewDoc.getPage(i+1),vp=p.getViewport({scale:.18});
-   const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);
-   await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
-   const btn=document.createElement('button');btn.className='thumb';btn.append(c);
+   const btn=document.createElement('button');btn.className='thumb';btn.dataset.index=i;
    const caption=document.createElement('span');caption.textContent='Página '+(i+1);btn.append(caption);
-   btn.onclick=()=>showPage(i);$('thumbs').append(btn);
+   btn.onclick=()=>showPage(i);$('thumbs').append(btn);observer.observe(btn);
   }
   await showPage(0);$('save').disabled=false;status(viewDoc.numPages+' página(s). Selecciona una herramienta.');
  }catch(e){status('No se pudo abrir el PDF: '+e.message)}
