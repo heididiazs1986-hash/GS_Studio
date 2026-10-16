@@ -21,6 +21,7 @@
     say('');
   }
   function setTool(next, retain = false) {
+    if (next === 'edit') { window.location.href = '../edit-pdf/'; return; }
     if (next === 'editor') {
       inEditor = true;
       $('editorWorkspace').classList.remove('hidden');
