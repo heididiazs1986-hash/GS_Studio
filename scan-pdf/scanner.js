@@ -10,7 +10,7 @@ const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const status=s=>{$('status').textContent=s};
 const crop=$('cropCanvas'),pen=crop.getContext('2d',{willReadFrequently:true});
 let stream=null,source=null,corners=null,cornerIndex=-1,preset='enhance',busy=false;
-let documents=[],queue=[],drag=null,previewVersion=0,previewReady=false,automaticCrop=false;
+let documents=[],queue=[],drag=null,previewVersion=0,previewReady=false,automaticCrop=false,directImportBusy=false;
 const defaultCorners=()=>[{x:.045,y:.045},{x:.955,y:.045},{x:.955,y:.955},{x:.045,y:.955}];
 const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
 
@@ -236,6 +236,48 @@ function enqueue(files){
   if(!accepted.length){status('Selecciona fotografías JPG, PNG, WebP o HEIC compatible con tu teléfono.');return;}
   queue.push(...accepted);showNext();
 }
+// Tecno's native Documents camera has already corrected and cropped the page.
+// Import its saved JPEG/PNG directly: NO edge detection, deskew or additional crop.
+$('nativeScansInput').addEventListener('change',async event=>{
+ const files=Array.from(event.target.files||[]);
+ event.target.value='';
+ if(!files.length)return;
+ if(source||queue.length||busy||directImportBusy){
+  status('Termina primero la foto que estás preparando y vuelve a importar los escaneos.');
+  return;
+ }
+ directImportBusy=true;$('nativeScansInput').disabled=true;$('exportBtn').disabled=true;
+ let imported=0,failed=0;
+ try{
+  for(const file of files){
+   if(!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) &&
+      !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)){
+     failed++;continue;
+   }
+   status('Importando escaneos corregidos: '+(imported+failed+1)+' de '+files.length+'…');
+   await nextFrame();
+   try{
+    // Decode with EXIF orientation and preserve the corrected native scan.
+    // Cap pixel dimensions for mobile memory, not the number of pages.
+    const image=await canvasFromImage(file,3000);
+    let blob;
+    try{blob=await new Promise((resolve,reject)=>
+       image.toBlob(value=>value?resolve(value):reject(Error('No fue posible preparar la imagen.')),'image/jpeg',.93));
+       const url=URL.createObjectURL(blob);
+       documents.push({blob,url,w:image.width,h:image.height});
+    }finally{image.width=image.height=1}
+    imported++;
+   }catch(error){failed++;console.warn('No se pudo importar el escaneo:',file.name,error)}
+  }
+ }finally{
+  directImportBusy=false;$('nativeScansInput').disabled=false;
+  renderPages();
+  status(imported+' página(s) importadas sin recortar.'+
+    (failed?' '+failed+' imagen(es) no pudieron abrirse.':'')+
+    (imported?' Ordénalas y pulsa Guardar documento PDF.':''));
+  if(imported)$('pagesPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+ }
+});
 $('galleryInput').addEventListener('change',event=>{enqueue(event.target.files);event.target.value=''});
 $('cameraFallback').addEventListener('change',event=>{enqueue(event.target.files);event.target.value=''});
 function stopCamera(){
@@ -407,17 +449,18 @@ function renderPages(){
   });
   $('pageCount').textContent=documents.length+' página(s)';
   $('cameraPageCount').textContent=String(documents.length);
-  $('exportBtn').disabled=!documents.length;
+  $('exportBtn').disabled=!documents.length||directImportBusy;
 }
 function cleanSession(){
   stopCamera();resetPhoto();queue=[];
   for(const p of documents)URL.revokeObjectURL(p.url);
-  documents=[];drag=null;busy=false;$('galleryInput').value='';$('cameraFallback').value='';
+  documents=[];drag=null;busy=false;directImportBusy=false;
+  $('nativeScansInput').value='';$('galleryInput').value='';$('cameraFallback').value='';
   renderPages();
 }
 $('exportBtn').onclick=async()=>{
   if(!documents.length)return;
-  if(source||queue.length||busy){status('Termina de añadir o descartar las fotos pendientes antes de generar el PDF.');return}
+  if(source||queue.length||busy||directImportBusy){status('Termina de preparar o importar todas las fotografías antes de generar el PDF.');return}
   if(!window.PDFLib){status('Motor PDF no disponible. Comprueba tu conexión.');return}
   $('exportBtn').disabled=true;status('Generando PDF multipágina…');
   try{
