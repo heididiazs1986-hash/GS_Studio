@@ -29,7 +29,7 @@ input[type=file]{display:none}label.file-button{display:flex;align-items:center;
 .info{background:#eef5fc;color:#245881;border-radius:10px;padding:9px;font-size:12px;min-height:35px}
 #exportBtn{width:100%;min-height:49px;font-size:15px}.empty{color:var(--muted);text-align:center;font-size:13px;padding:22px 8px}
 .small{font-size:12px}
-@media(min-width:768px){main{display:none}#gate{display:block!important}}
+@media(min-width:768px){main{max-width:680px}}
 </style>
 </head>
 <body>
@@ -37,10 +37,10 @@ input[type=file]{display:none}label.file-button{display:flex;align-items:center;
 <section id="gate" hidden><h2>Escanear PDF es exclusivo para celular 📱</h2><p>Abre GS Studio desde tu teléfono para escanear con su cámara.</p><a href="../gs-studio/">Volver a GS Studio</a></section>
 <main id="scanner" hidden>
 <section class="panel"><div class="micro">ESCÁNER DOCUMENTAL</div><h1>Escanear documentos</h1>
-<p class="hint">Captura tus hojas, corrige su perspectiva y crea un solo PDF. Sin OCR y sin subir fotografías a un servidor.</p>
-<div class="actions"><button class="primary" id="startCamera" type="button">📷 Abrir cámara</button>
+<p class="hint">Captura tus hojas, corrige su perspectiva y crea un solo PDF. Sin OCR y sin enviar tus fotos a nuestros servidores.</p>
+<div class="actions"><button class="primary" id="startCamera" type="button">Abrir cámara</button>
 <label class="file-button" for="galleryInput">Elegir fotografías</label></div>
-<input type="file" id="galleryInput" accept="image/jpeg,image/png,image/webp" multiple>
+<input type="file" id="galleryInput" accept="image/*" multiple>
 <input type="file" id="cameraFallback" accept="image/*" capture="environment">
 <div id="cameraPanel" hidden><video id="video" autoplay muted playsinline></video>
 <div id="cameraControls"><button id="takePhoto" class="primary grow">Capturar hoja</button><button id="stopCamera">Cerrar cámara</button></div>
