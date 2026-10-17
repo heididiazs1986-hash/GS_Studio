@@ -1,0 +1,37 @@
+{
+  "id": "/gs-studio/",
+  "name": "GS Studio - Gestión Social",
+  "short_name": "GS Studio",
+  "description": "Centro de gestión documental - Gestión Social",
+  "lang": "es-CO",
+  "start_url": "/gs-studio/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FF6900",
+  "prefer_related_applications": false,
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "/gs-studio/icons/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/gs-studio/icons/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/gs-studio/icons/studio-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
