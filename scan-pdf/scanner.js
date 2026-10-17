@@ -2,8 +2,7 @@
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
-const isMobile=matchMedia('(max-width:767px) and (pointer:coarse)').matches ||
-  (/Android|iPhone|iPod/i.test(navigator.userAgent)&&innerWidth<1000);
+const isMobile=navigator.userAgentData?.mobile===true || /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent);
 $('gate').hidden=isMobile;$('scanner').hidden=!isMobile;
 if(!isMobile)return;
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
@@ -150,8 +149,8 @@ async function showNext(){
   finally{busy=false;if(!source&&queue.length)showNext()}
 }
 function enqueue(files){
-  const accepted=Array.from(files||[]).filter(f=>/^image\/(jpeg|png|webp)$/i.test(f.type));
-  if(!accepted.length){status('Utiliza fotos JPG, PNG o WebP.');return;}
+  const accepted=Array.from(files||[]).filter(f=>/^image\/(jpeg|png|webp|heic|heif)$/i.test(f.type));
+  if(!accepted.length){status('Selecciona fotografías JPG, PNG, WebP o HEIC compatible con tu teléfono.');return;}
   queue.push(...accepted);showNext();
 }
 $('galleryInput').addEventListener('change',event=>{enqueue(event.target.files);event.target.value=''});
@@ -330,6 +329,7 @@ function cleanSession(){
 }
 $('exportBtn').onclick=async()=>{
   if(!documents.length)return;
+  if(source||queue.length||busy){status('Termina de añadir o descartar las fotos pendientes antes de generar el PDF.');return}
   if(!window.PDFLib){status('Motor PDF no disponible. Comprueba tu conexión.');return}
   $('exportBtn').disabled=true;status('Generando PDF multipágina…');
   try{
