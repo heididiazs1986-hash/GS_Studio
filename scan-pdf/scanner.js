@@ -2,7 +2,7 @@
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
-const isMobile=navigator.userAgentData?.mobile===true || /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent);
+const isMobile=(navigator.userAgentData?.mobile===true || /Mobi|iPhone|iPod|Android|Windows Phone|BlackBerry|BB10|webOS|Opera Mini|KaiOS/i.test(navigator.userAgent||'') || (navigator.maxTouchPoints>0 && Math.min(screen.width,screen.height)<=820 && matchMedia('(pointer:coarse)').matches));
 $('gate').hidden=isMobile;$('scanner').hidden=!isMobile;
 if(!isMobile)return;
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
