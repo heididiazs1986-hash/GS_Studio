@@ -78,21 +78,45 @@ async function loadFile(file){
 async function showPage(index){
  const version=++renderVersion;
  if(inlineEditor)finishInlineText();
+ const previousPage=selectedPage;
  selectedPage=index;selected=null;
  $('deskewAngle').disabled=false;$('deskewReset').disabled=false;
  $('deskewAngle').value=String(deskew[index]||0);$('deskewValue').textContent=(deskew[index]||0)+'°';
- const page=await viewDoc.getPage(index+1);
- const vp=page.getViewport({scale:1});const scale=Math.min(1.2,900/vp.width)*zoom;
- const viewport=page.getViewport({scale});
- const c=$('pageCanvas');c.width=Math.ceil(viewport.width);c.height=Math.ceil(viewport.height);
- sheet.style.width=c.width+'px';sheet.style.height=c.height+'px';
- await page.render({canvasContext:c.getContext('2d'),viewport}).promise;
- if(version!==renderVersion)return;
- $('zoomValue').textContent=Math.round(zoom*100)+'%';
- c.style.transform='rotate('+(deskew[index]||0)+'deg)';
- c.style.transformOrigin='center center';
- [...$('thumbs').children].forEach((n,i)=>n.classList.toggle('active',i===index));
- renderItems();
+ const viewer=document.querySelector('.viewer');
+ const oldWidth=Math.max(1,sheet.offsetWidth),oldHeight=Math.max(1,sheet.offsetHeight);
+ const focusX=(viewer.scrollLeft+viewer.clientWidth/2)/oldWidth;
+ const focusY=(viewer.scrollTop+viewer.clientHeight/2)/oldHeight;
+ try{
+  const page=await viewDoc.getPage(index+1);
+  if(version!==renderVersion)return;
+  const vp=page.getViewport({scale:1});
+  const scale=Math.min(1.2,900/vp.width)*zoom;
+  const viewport=page.getViewport({scale});
+  // Paint into a new canvas. Replacing the current canvas only when rendering
+  // finishes avoids races between repeated zoom clicks on the same PDF page.
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.ceil(viewport.width));
+  canvas.height=Math.max(1,Math.ceil(viewport.height));
+  await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+  if(version!==renderVersion)return;
+  const previousCanvas=$('pageCanvas');
+  canvas.id='pageCanvas';
+  previousCanvas.replaceWith(canvas);
+  sheet.style.width=canvas.width+'px';sheet.style.height=canvas.height+'px';
+  canvas.style.width=canvas.width+'px';canvas.style.height=canvas.height+'px';
+  canvas.style.transform='rotate('+(deskew[index]||0)+'deg)';
+  canvas.style.transformOrigin='center center';
+  $('zoomValue').textContent=Math.round(zoom*100)+'%';
+  [...$('thumbs').children].forEach((n,i)=>n.classList.toggle('active',i===index));
+  renderItems();
+  // Keep the same document area near the center while zooming.
+  if(index===previousPage){
+   viewer.scrollLeft=Math.max(0,Math.round(focusX*canvas.width-viewer.clientWidth/2));
+   viewer.scrollTop=Math.max(0,Math.round(focusY*canvas.height-viewer.clientHeight/2));
+  }else{viewer.scrollLeft=0;viewer.scrollTop=0}
+ }catch(error){
+  if(version===renderVersion)status('No se pudo actualizar la vista: '+error.message);
+ }
 }
 function renderItems(){
  overlay.replaceChildren();
