@@ -60,6 +60,13 @@ input[type=file]{display:none}
 .info{background:#eef4fa;border-radius:8px;padding:9px;font-size:12px;color:var(--blue);margin:10px 0;min-height:35px}
 #cameraPanel button{font-size:14px}
 @media(min-width:768px){main{display:none}}
+.native-scan{border:1px solid #bed1e2;background:#f2f7fd;border-radius:13px;padding:13px;margin:15px 0 14px}
+.native-scan-title{font-weight:800;font-size:14px;color:var(--blue);display:flex;align-items:center;gap:9px}
+.native-scan-icon{background:#245881;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;font-size:14px}
+.native-scan p{margin:9px 0 12px}
+.native-import{min-height:52px;background:#245881;color:white;border-color:#245881;text-align:center}
+.other-methods{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
+.other-methods .actions{margin-top:8px}
 </style>
 </head>
 <body>
@@ -69,10 +76,17 @@ input[type=file]{display:none}
 <section id="capturePanel" class="panel">
 <div class="eyebrow">ESCÁNER DOCUMENTAL</div><h1>Escanea tus documentos</h1>
 <p class="hint">Captura una hoja, revisa el resultado y añádela al PDF. Sin OCR y sin subir fotografías a nuestros servidores.</p>
+<section class="native-scan" aria-labelledby="nativeScanTitle">
+<div class="native-scan-title" id="nativeScanTitle"><span class="native-scan-icon">✓</span> ¿Ya escaneaste con la cámara del Tecno?</div>
+<p class="hint">Importa las fotos que guardó el modo <b>Documentos</b>. Conservaremos su recorte y las uniremos directamente en un PDF, sin volver a procesar los bordes.</p>
+<label class="file-button native-import" for="nativeScansInput">Importar escaneos sin recortar</label>
+<input id="nativeScansInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple>
+</section>
+<div class="other-methods"><div class="eyebrow">O ESCANEA DESDE GS STUDIO</div>
 <div class="actions">
 <button class="primary" type="button" id="startCamera">Abrir cámara</button>
-<label class="file-button" for="galleryInput">Elegir fotos</label>
-</div>
+<label class="file-button" for="galleryInput">Ajustar fotografías</label>
+</div></div>
 <input id="galleryInput" type="file" accept="image/*" multiple>
 <input id="cameraFallback" type="file" accept="image/*" capture="environment">
 </section>
