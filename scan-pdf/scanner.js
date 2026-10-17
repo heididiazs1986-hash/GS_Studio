@@ -11,6 +11,7 @@ const status=s=>{$('status').textContent=s};
 const crop=$('cropCanvas'),pen=crop.getContext('2d',{willReadFrequently:true});
 let stream=null,source=null,corners=null,cornerIndex=-1,preset='enhance',busy=false;
 let documents=[],queue=[],drag=null,previewVersion=0,previewReady=false,automaticCrop=false,directImportBusy=false;
+let cameraDetectionToken=0,liveCorners=null,lastLiveAt=0,wasCameraCapture=false;
 const defaultCorners=()=>[{x:.045,y:.045},{x:.955,y:.045},{x:.955,y:.955},{x:.045,y:.955}];
 const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
 
@@ -137,6 +138,78 @@ function detectPaperByContrast(image){
   return quad;
 }
 function findPaper(image){return detectCorners(image)||detectPaperByContrast(image)}
+function detectWithEngine(image){
+  const detector=window.GSScannerDetector;
+  if(detector?.ready){
+    const scale=Math.min(1,440/Math.max(image.width,image.height));
+    const small=document.createElement('canvas');
+    small.width=Math.max(1,Math.round(image.width*scale));
+    small.height=Math.max(1,Math.round(image.height*scale));
+    try{
+      small.getContext('2d',{willReadFrequently:true}).drawImage(image,0,0,small.width,small.height);
+      const r=detector.detect(small);
+      if(r?.confidence>=.3)return r.corners;
+    }finally{small.width=small.height=1}
+  }
+  return findPaper(image);
+}
+function cameraGuideCorners(){
+  const panel=$('cameraPanel').getBoundingClientRect(),guide=document.querySelector('.camera-outline').getBoundingClientRect();
+  const video=$('video'),vw=video.videoWidth,vh=video.videoHeight;
+  if(!vw||!vh||!panel.width||!panel.height)return defaultCorners();
+  const factor=Math.max(panel.width/vw,panel.height/vh);
+  const width=vw*factor,height=vh*factor,ox=(panel.width-width)/2,oy=(panel.height-height)/2;
+  const x=x=>clamp(((x-panel.left)-ox)/width,0,1);
+  const y=y=>clamp(((y-panel.top)-oy)/height,0,1);
+  return [{x:x(guide.left),y:y(guide.top)},{x:x(guide.right),y:y(guide.top)},
+    {x:x(guide.right),y:y(guide.bottom)},{x:x(guide.left),y:y(guide.bottom)}];
+}
+function drawDetectedContour(corners){
+  const overlay=$('cameraEdges'),panel=$('cameraPanel'),video=$('video');
+  if(!panel.isConnected)return;
+  const rect=panel.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
+  const w=rect.width,h=rect.height;
+  overlay.width=Math.round(w*ratio);overlay.height=Math.round(h*ratio);
+  const ctx=overlay.getContext('2d');ctx.scale(ratio,ratio);
+  if(!corners||!video.videoWidth)return;
+  const factor=Math.max(w/video.videoWidth,h/video.videoHeight);
+  const imgW=video.videoWidth*factor,imgH=video.videoHeight*factor;
+  const ox=(w-imgW)/2,oy=(h-imgH)/2;
+  const pts=corners.map(p=>({x:ox+p.x*imgW,y:oy+p.y*imgH}));
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+  pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();
+  ctx.lineWidth=4;ctx.strokeStyle='#ff6900';ctx.shadowColor='#101b27';ctx.shadowBlur=8;ctx.stroke();ctx.shadowBlur=0;
+  pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke()});
+}
+function updateCameraDetection(corners){
+  const found=Boolean(corners),message=found?'Documento detectado':'Centra la hoja y mantén el teléfono estable';
+  if($('cameraHint').textContent!==message)$('cameraHint').textContent=message;
+  $('cameraDetection').innerHTML=found?'Bordes<br>detectados':'Buscando<br>bordes…';
+  document.querySelector('.camera-outline').classList.toggle('detected',found);
+  drawDetectedContour(corners);
+}
+function runLiveDetection(token){
+  const sample=document.createElement('canvas');
+  let timer=null;
+  const release=()=>{if(timer)clearTimeout(timer);sample.width=sample.height=1};
+  function tick(){
+    if(token!==cameraDetectionToken||!stream||!$('video').videoWidth){release();return}
+    try{
+      const video=$('video'),ratio=Math.min(1,390/Math.max(video.videoWidth,video.videoHeight));
+      sample.width=Math.max(1,Math.round(video.videoWidth*ratio));
+      sample.height=Math.max(1,Math.round(video.videoHeight*ratio));
+      sample.getContext('2d',{willReadFrequently:true}).drawImage(video,0,0,sample.width,sample.height);
+      const found=detectWithEngine(sample);
+      liveCorners=found?found.map(p=>({...p})):null;
+      lastLiveAt=found?performance.now():0;
+      updateCameraDetection(found);
+    }catch(e){console.warn('Detección en vivo:',e)}
+    if(token!==cameraDetectionToken||!stream){release();return}
+    timer=setTimeout(tick,650);
+  }
+  tick();
+}
+
 function drawCorners(){
   if(!source)return;
   const area=document.querySelector('.edit-surface');
