@@ -311,45 +311,61 @@ function enqueue(files){
   if(!accepted.length){status('Selecciona fotografías JPG, PNG, WebP o HEIC compatible con tu teléfono.');return;}
   queue.push(...accepted.map(file=>({file,captured:false})));showNext();
 }
-// Tecno's native Documents camera has already corrected and cropped the page.
-// Import its saved JPEG/PNG directly: NO edge detection, deskew or additional crop.
-$('nativeScansInput').addEventListener('change',async event=>{
+// Las cámaras de distintas marcas guardan documentos corregidos como imágenes.
+// Se importan directamente, sin detectar ni recortar de nuevo sus bordes.
+const nativePicker=$('nativeScansInput');
+nativePicker.addEventListener('click',()=>{
+ if(!directImportBusy)status('Selecciona tus escaneos en Galería o Archivos. Puedes elegir varias imágenes.');
+});
+nativePicker.addEventListener('change',async event=>{
  const files=Array.from(event.target.files||[]);
- event.target.value='';
+ event.target.value=''; // Permite seleccionar después el mismo archivo.
  if(!files.length)return;
  if(source||queue.length||busy||directImportBusy){
   status('Termina primero la foto que estás preparando y vuelve a importar los escaneos.');
   return;
  }
- directImportBusy=true;$('nativeScansInput').disabled=true;$('exportBtn').disabled=true;
+ directImportBusy=true;nativePicker.disabled=true;$('exportBtn').disabled=true;
  let imported=0,failed=0;
+ const errors=[];
  try{
-  for(const file of files){
-   if(!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) &&
-      !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)){
-     failed++;continue;
-   }
-   status('Importando escaneos corregidos: '+(imported+failed+1)+' de '+files.length+'…');
+  for(let i=0;i<files.length;i++){
+   const file=files[i],name=file.name||'Imagen '+(i+1);
+   status('Importando escaneos: '+(i+1)+' de '+files.length+'…');
    await nextFrame();
+   // Algunos gestores de archivos de Android entregan el MIME vacío o genérico.
+   // Admitimos extensiones fotográficas aun cuando file.type no venga informado.
+   if(!(/^image\/(?!svg\+xml)/i.test(file.type||'') ||
+         /\.(jpe?g|png|webp|heic|heif|bmp|gif)$/i.test(name))){
+    failed++;errors.push(name+': selecciona una fotografía, no un PDF u otro archivo.');continue;
+   }
    try{
-    // Decode with EXIF orientation and preserve the corrected native scan.
-    // Cap pixel dimensions for mobile memory, not the number of pages.
+    if(!file.size)throw Error('El archivo está vacío.');
     const image=await canvasFromImage(file,3000);
-    let blob;
-    try{blob=await new Promise((resolve,reject)=>
-       image.toBlob(value=>value?resolve(value):reject(Error('No fue posible preparar la imagen.')),'image/jpeg',.93));
-       const url=URL.createObjectURL(blob);
-       documents.push({blob,url,w:image.width,h:image.height});
+    try{
+      const blob=await new Promise((resolve,reject)=>
+        image.toBlob(value=>value?resolve(value):reject(Error('No se pudo preparar la imagen.')),'image/jpeg',.93));
+      const url=URL.createObjectURL(blob);
+      documents.push({blob,url,w:image.width,h:image.height});
+      imported++;
     }finally{image.width=image.height=1}
-    imported++;
-   }catch(error){failed++;console.warn('No se pudo importar el escaneo:',file.name,error)}
+   }catch(error){
+    failed++;
+    console.warn('No se pudo importar el escaneo:',name,error);
+    errors.push(name+': '+(error?.message||'formato no compatible.'));
+   }
   }
+ }catch(error){
+  failed++;
+  errors.push('Importación interrumpida: '+(error?.message||'error inesperado.'));
  }finally{
-  directImportBusy=false;$('nativeScansInput').disabled=false;
+  directImportBusy=false;nativePicker.disabled=false;
   renderPages();
+  const detail=errors.length?' No se pudieron importar '+failed+': '+errors.slice(0,2).join(' | ')+
+   (errors.length>2?' (y '+(errors.length-2)+' más).':'')+
+   ' Si tu teléfono guarda HEIC/HEIF y falla, exporta la foto en JPG.':'';
   status(imported+' página(s) importadas sin recortar.'+
-    (failed?' '+failed+' imagen(es) no pudieron abrirse.':'')+
-    (imported?' Ordénalas y pulsa Guardar documento PDF.':''));
+    (imported?' Ordénalas y pulsa Guardar documento PDF.':'')+detail);
   if(imported)$('pagesPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
  }
 });
