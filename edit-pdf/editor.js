@@ -5,6 +5,22 @@ const sheet=$('sheet'),overlay=$('overlay'),status=s=>{$('status').textContent=s
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 $('textSettings').style.display='none';
 const current=()=>items.filter(x=>x.page===selectedPage);
+const pdfColor=hex=>PDFLib.rgb(...[1,3,5].map(j=>parseInt((/^#[0-9a-f]{6}$/i.test(hex||'')?hex:'#ffffff').slice(j,j+2),16)/255));
+function showFrameSettings(){$('coverFrameOptions').hidden=!$('coverFrame').checked}
+function applyWhiteoutStyle(item,node){
+ const show=!!item.frame;node.style.backgroundColor=item.color||'#ffffff';
+ node.classList.toggle('has-frame',show);
+ node.style.border=show?(Math.max(.5,Number(item.borderWidth)||1.5)*$('pageCanvas').width/Math.max(1,doc.getPage(selectedPage).getWidth()))+'px solid '+(item.borderColor||'#245881'):'none';
+}
+function deskewScale(w,h,angle){
+ const a=Math.abs(Number(angle)||0)*Math.PI/180;
+ return Math.min(w/(Math.abs(w*Math.cos(a))+Math.abs(h*Math.sin(a))),h/(Math.abs(h*Math.cos(a))+Math.abs(w*Math.sin(a))));
+}
+function updateDeskewPreview(){
+ const c=$('pageCanvas'),angle=Number(deskew[selectedPage]||0);
+ c.style.transform='rotate('+angle+'deg) scale('+deskewScale(c.width,c.height,angle)+')';
+ c.style.transformOrigin='center center';
+}
 function add(item){items.push(item);selected=item;renderItems();$('save').disabled=false}
 function finishInlineText(cancel=false){
  if(!inlineEditor)return;
@@ -104,8 +120,7 @@ async function showPage(index){
   previousCanvas.replaceWith(canvas);
   sheet.style.width=canvas.width+'px';sheet.style.height=canvas.height+'px';
   canvas.style.width=canvas.width+'px';canvas.style.height=canvas.height+'px';
-  canvas.style.transform='rotate('+(deskew[index]||0)+'deg)';
-  canvas.style.transformOrigin='center center';
+  updateDeskewPreview();
   $('zoomValue').textContent=Math.round(zoom*100)+'%';
   [...$('thumbs').children].forEach((n,i)=>n.classList.toggle('active',i===index));
   renderItems();
@@ -124,11 +139,11 @@ function renderItems(){
   const node=document.createElement('div');node.className='edit-item '+item.kind+(item===selected?' selected':'');
   node.style.left=(item.x*100)+'%';node.style.top=(item.y*100)+'%';
   node.style.width=(item.w*100)+'%';node.style.height=(item.h*100)+'%';
-  if(item.kind==='whiteout')node.style.backgroundColor=item.color||'#ffffff';
+  if(item.kind==='whiteout')applyWhiteoutStyle(item,node);
   // While placing text, the white coverage must not intercept clicks on the page.
   if(item.kind==='whiteout' && mode!=='select')node.style.pointerEvents='none';
   if(item.kind==='text'){
-    node.textContent=item.text;node.style.color='#182433';
+    node.textContent=item.text;node.style.color='#182433';node.style.lineHeight='1.2';
     node.style.fontSize=Math.max(7,item.size*overlay.getBoundingClientRect().width/item.baseWidth)+'px';
     node.style.lineHeight='1.25';
   }
@@ -162,9 +177,15 @@ function renderItems(){
     const toolbar=document.createElement('div');toolbar.className='whiteout-toolbar';
     const color=document.createElement('input');color.type='color';color.value=item.color||'#ffffff';color.title='Color de la cobertura';color.setAttribute('aria-label','Color de la cobertura');
     color.oninput=e=>{item.color=e.target.value;node.style.backgroundColor=item.color;$('coverColor').value=item.color};
+    const toggleFrame=document.createElement('button');toggleFrame.type='button';toggleFrame.className='frame-toggle';
+    toggleFrame.textContent=item.frame?'Marco: Sí':'Marco: No';
+    toggleFrame.title='Incluir o quitar el marco en este recuadro y en el PDF final';
+    toggleFrame.onclick=e=>{e.stopPropagation();item.frame=!item.frame;
+      $('coverFrame').checked=item.frame;showFrameSettings();renderItems();
+    };
     const copy=document.createElement('button');copy.type='button';copy.textContent='Duplicar';copy.onclick=e=>{e.stopPropagation();add({...item,x:Math.min(.9,item.x+.02),y:Math.min(.9,item.y+.02)});};
     const remove=document.createElement('button');remove.type='button';remove.textContent='Eliminar';remove.onclick=e=>{e.stopPropagation();items=items.filter(x=>x!==item);selected=null;renderItems()};
-    toolbar.append(color,copy,remove);toolbar.onpointerdown=e=>e.stopPropagation();node.append(toolbar);
+    toolbar.append(color,toggleFrame,copy,remove);toolbar.onpointerdown=e=>e.stopPropagation();node.append(toolbar);
     const handle=document.createElement('span');handle.className='whiteout-handle';handle.title='Arrastra para cambiar tamaño';
     handle.onpointerdown=e=>{
       e.stopPropagation();gesture={item,at:xy(e),w:item.w,h:item.h,node,kind:'resize'};
@@ -228,7 +249,7 @@ overlay.addEventListener('pointerup',e=>{
   const p=xy(e),a=gesture.start;
   const w=Math.abs(p.x-a.x),h=Math.abs(p.y-a.y);
   if(w>.003&&h>.003){
-   add({page:selectedPage,kind:'whiteout',x:Math.min(p.x,a.x),y:Math.min(p.y,a.y),w,h,color:$('coverColor').value});
+   add({page:selectedPage,kind:'whiteout',x:Math.min(p.x,a.x),y:Math.min(p.y,a.y),w,h,color:$('coverColor').value,frame:$('coverFrame').checked,borderColor:$('coverBorderColor').value,borderWidth:Number($('coverBorderWidth').value)});
    mode='select';
    document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='select'));
    $('coverSettings').style.display='none';renderItems();
@@ -253,17 +274,21 @@ $('deskewAngle').oninput=e=>{
  const angle=Number(e.target.value);
  deskew[selectedPage]=angle;
  $('deskewValue').textContent=angle+'°';
- $('pageCanvas').style.transform='rotate('+angle+'deg)';
+ updateDeskewPreview();
  status('Vista previa: '+angle+'°. El ajuste se aplicará únicamente a esta página al exportar.');
 };
 $('deskewReset').onclick=()=>{
  if(!doc)return;
  deskew[selectedPage]=0;
  $('deskewAngle').value='0';$('deskewValue').textContent='0°';
- $('pageCanvas').style.transform='rotate(0deg)';
+ updateDeskewPreview();
 };
 $('sampleCover').onclick=()=>{samplingColor=true;status('Toca una zona limpia de la hoja para copiar su color.');};
 $('coverColor').oninput=e=>{if(selected?.kind==='whiteout'){selected.color=e.target.value;renderItems()}};
+$('coverFrame').onchange=e=>{showFrameSettings();if(selected?.kind==='whiteout'){selected.frame=e.target.checked;renderItems()}};
+$('coverBorderColor').oninput=e=>{if(selected?.kind==='whiteout'){selected.borderColor=e.target.value;renderItems()}};
+$('coverBorderWidth').onchange=e=>{if(selected?.kind==='whiteout'){selected.borderWidth=Math.max(.5,Math.min(6,Number(e.target.value)||1.5));renderItems()}};
+showFrameSettings();
 async function setZoom(value){if(!doc)return;zoom=Math.max(.5,Math.min(3,value));await showPage(selectedPage)}
 $('zoomIn').onclick=()=>setZoom(zoom+.25);
 $('zoomOut').onclick=()=>setZoom(zoom-.25);
@@ -303,13 +328,42 @@ $('save').onclick=async()=>{
     page.drawImage(image,{x:0,y:0,width,height});
   }
   const font=await result.embedFont(PDFLib.StandardFonts.Helvetica);
+  // The preview uses PDF.js viewport coordinates; convert back to the PDF
+  // user-space coordinates when exporting (honors crop boxes and /Rotate).
+  const boundsFor=async item=>{
+    const page=result.getPage(item.page);
+    if(Math.abs(Number(deskew[item.page]||0))>.001){
+      const {width,height}=page.getSize();
+      return {x:item.x*width,y:(1-item.y-item.h)*height,width:item.w*width,height:item.h*height,
+        textPoint:[item.x*width,(1-item.y)*height-(Number(item.size)||16)],rotation:0};
+    }
+    const source=await viewDoc.getPage(item.page+1);
+    const vp=source.getViewport({scale:1});
+    const points=[
+      vp.convertToPdfPoint(item.x*vp.width,item.y*vp.height),
+      vp.convertToPdfPoint((item.x+item.w)*vp.width,item.y*vp.height),
+      vp.convertToPdfPoint(item.x*vp.width,(item.y+item.h)*vp.height),
+      vp.convertToPdfPoint((item.x+item.w)*vp.width,(item.y+item.h)*vp.height)
+    ];
+    const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);
+    const size=Math.max(6,Math.min(72,Number(item.size)||16));
+    const textPoint=vp.convertToPdfPoint(item.x*vp.width,item.y*vp.height+size);
+    return {x:Math.min(...xs),y:Math.min(...ys),width:Math.max(...xs)-Math.min(...xs),
+      height:Math.max(...ys)-Math.min(...ys),textPoint,rotation:(360-(vp.rotation%360))%360};
+  };
   for(const item of items){
-   const page=result.getPage(item.page),{width,height}=page.getSize();
-   const x=item.x*width,y=(1-item.y-item.h)*height;
-   if(item.kind==='whiteout')page.drawRectangle({x,y,width:item.w*width,height:item.h*height,color:PDFLib.rgb(...[1,3,5].map(j=>parseInt((item.color||'#ffffff').slice(j,j+2),16)/255))});
-   else if(item.kind==='text'){
-    const maxWidth=item.w*width;const size=Math.max(6,Math.min(72,item.size));
-    page.drawText(item.text||' ',{x,y:y+Math.max(0,item.h*height-size*1.2),size,font,color:PDFLib.rgb(.09,.14,.2),maxWidth,lineHeight:size*1.2});
+   const page=result.getPage(item.page),geom=await boundsFor(item);
+   if(item.kind==='whiteout'){
+     const opts={x:geom.x,y:geom.y,width:geom.width,height:geom.height,
+       color:pdfColor(item.color||'#ffffff'),borderWidth:0};
+     if(item.frame){opts.borderColor=pdfColor(item.borderColor||'#245881');
+       opts.borderWidth=Math.max(.5,Math.min(6,Number(item.borderWidth)||1.5));}
+     page.drawRectangle(opts);
+   }else if(item.kind==='text'&&String(item.text||'').trim()){
+     const size=Math.max(6,Math.min(72,Number(item.size)||16));
+     page.drawText(item.text,{x:geom.textPoint[0],y:geom.textPoint[1],
+       size,font,color:PDFLib.rgb(.09,.14,.2),maxWidth:Math.max(size,geom.width),
+       rotate:PDFLib.degrees(geom.rotation),lineHeight:size*1.2});
    }
   }
   const bytes=await result.save(),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
