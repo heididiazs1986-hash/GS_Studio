@@ -18,6 +18,15 @@
     $('exportBtn').disabled = true;
     $('rangeStart').value = '1';
     $('rangeEnd').value = '1';
+    $('signatureImage').value = '';
+    $('signatureCamera').value = '';
+    signatureFile = null;signDirty = false;
+    ink.clearRect(0, 0, signature.width, signature.height);
+    $('signatureSource').textContent = 'Dibuja con el dedo, lápiz o mouse; también puedes elegir una imagen o una fotografía.';
+    $('signPage').value='1';
+    $('signX').value='60';$('signY').value='70';$('signWidth').value='150';
+    $('signResultBtn').classList.add('hidden');
+    if (typeof closeCrop === 'function') closeCrop();
     say('');
   }
   function setTool(next, retain = false) {
@@ -495,7 +504,9 @@
       anchor.download = 'GS_Studio_' + tool + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
       document.body.append(anchor); anchor.click(); anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-      say('PDF descargado. Revisa el documento antes de compartirlo.');
+      // Once the browser initiates the download, release all source files from the session.
+      clear();
+      say('Descarga iniciada. Los archivos de esta sesión se han liberado; GS Studio está listo para un nuevo trabajo.');
     } catch (error) { say('Error: ' + error.message); }
     finally { button.disabled = !pages.length; }
   }
