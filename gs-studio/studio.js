@@ -31,6 +31,7 @@
   }
   function setTool(next, retain = false) {
     if (next === 'edit') { window.location.href = '../edit-pdf/'; return; }
+    if (next === 'scan') { window.location.href = '../scan-pdf/'; return; }
     if (next === 'editor') {
       inEditor = true;
       $('editorWorkspace').classList.remove('hidden');
@@ -60,6 +61,10 @@
       : 'Abre documentos PDF o un ZIP de GS Documentos y organiza sus páginas.';
     $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : 'Generar PDF';
     if (retain) render();
+  }
+  // Landscape-oriented phones keep scanner access; desktop does not show this control.
+  if(/iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent)){
+    document.querySelectorAll('.scan-mobile-only').forEach(card=>card.style.display='block');
   }
   document.querySelectorAll('[data-tool]').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
   $('backToPdf').onclick = () => setTool(tool, true);
