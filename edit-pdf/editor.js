@@ -212,7 +212,17 @@ $('save').onclick=async()=>{
   }
   const bytes=await result.save(),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
   const link=document.createElement('a');link.href=url;link.download='GS_Studio_PDF_corregido.pdf';document.body.append(link);link.click();link.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),30000);status('PDF corregido descargado. Comprueba las páginas antes de utilizarlo.');
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  // Clear all document data held by this editor once the download has started.
+  original=null;doc=null;items=[];selected=null;gesture=null;deskew={};samplingColor=false;
+  if(window.__gsThumbnailObserver){window.__gsThumbnailObserver.disconnect();window.__gsThumbnailObserver=null;}
+  if(viewDoc){viewDoc.destroy().catch(()=>{});viewDoc=null;}
+  $('file').value='';$('thumbs').replaceChildren();
+  $('pageCanvas').width=1;$('pageCanvas').height=1;
+  $('overlay').replaceChildren();$('save').disabled=true;
+  $('deskewAngle').disabled=true;$('deskewReset').disabled=true;
+  $('zoomValue').textContent='100%';
+  status('Descarga iniciada. El documento se ha retirado del editor; ya puedes abrir otro.');
  }catch(e){status('Error: '+e.message)}finally{$('save').disabled=false}
 };
 })();
