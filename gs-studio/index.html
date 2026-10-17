@@ -67,8 +67,7 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 .tile:hover{box-shadow:0 6px 20px #1d273610;transform:translateY(-1px)}
 .tile:focus-visible{outline:3px solid #2166af;outline-offset:2px}
 @media(max-width:750px){.tool-icon{width:44px;height:44px}.brand-logo{width:42px;height:42px}}
-.scan-mobile-only{display:none}
-@media(max-width:767px) and (pointer:coarse){.scan-mobile-only{display:block}}
+.scan-mobile-only{display:none} /* JavaScript reveals only on phone user agents */
 </style></head>
 <body><header><img class="brand-logo" src="./icons/studio-logo.svg" alt="GS Studio"><div><strong>GS Studio</strong><div class="subtitle">Centro de gestión documental - Gestión Social</div></div></header>
 <main><section class="hero"><div><span class="orange">GESTIÓN DOCUMENTAL</span><h1>Todos tus documentos en un solo lugar.</h1><p class="subtitle">Sin subir tus archivos a nuestros servidores. Conservamos los originales.</p></div></section>
