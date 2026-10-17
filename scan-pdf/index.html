@@ -68,7 +68,9 @@ input[type=file]{display:none}
 .native-scan-title{font-weight:800;font-size:14px;color:var(--blue);display:flex;align-items:center;gap:9px}
 .native-scan-icon{background:#245881;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;font-size:14px}
 .native-scan p{margin:9px 0 12px}
-.native-import{min-height:52px;background:#245881;color:white;border-color:#245881;text-align:center}
+.native-import{min-height:52px;background:#245881;color:white;border-color:#245881;text-align:center;position:relative;overflow:hidden}
+.native-import input[type=file]{display:block;position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;pointer-events:auto;font-size:0}
+.native-import:focus-within{outline:3px solid #ff6900;outline-offset:3px}
 .other-methods{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
 .other-methods .actions{margin-top:8px}
 </style>
@@ -83,8 +85,7 @@ input[type=file]{display:none}
 <section class="native-scan" aria-labelledby="nativeScanTitle">
 <div class="native-scan-title" id="nativeScanTitle"><span class="native-scan-icon">✓</span> ¿Ya escaneaste con la cámara del celular?</div>
 <p class="hint">Importa las fotos que guardó el modo <b>Documentos</b> de tu teléfono. Conservaremos el recorte y las uniremos directamente en un PDF, sin procesar de nuevo los bordes.</p>
-<label class="file-button native-import" for="nativeScansInput">Importar escaneos sin recortar</label>
-<input id="nativeScansInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple>
+<label class="file-button native-import"><span>Importar escaneos sin recortar</span><input id="nativeScansInput" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple aria-label="Seleccionar imágenes escaneadas desde el teléfono"></label>
 </section>
 <div class="other-methods"><div class="eyebrow">O ESCANEA DESDE GS STUDIO</div>
 <div class="actions">
