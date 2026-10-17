@@ -1,11 +1,48 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={},zoom=1,renderVersion=0,samplingColor=false;
+let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={},zoom=1,renderVersion=0,samplingColor=false,inlineEditor=null;
 const sheet=$('sheet'),overlay=$('overlay'),status=s=>{$('status').textContent=s};
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 $('textSettings').style.display='none';
 const current=()=>items.filter(x=>x.page===selectedPage);
 function add(item){items.push(item);selected=item;renderItems();$('save').disabled=false}
+function finishInlineText(cancel=false){
+ if(!inlineEditor)return;
+ const {field,item,before}=inlineEditor;inlineEditor=null;
+ item.text=cancel?before:field.value;
+ field.remove();
+ if(!String(item.text||'').trim())items=items.filter(x=>x!==item);
+ selected=null;mode='select';
+ document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='select'));
+ $('textSettings').style.display='none';$('coverSettings').style.display='none';
+ renderItems();
+ status('Texto colocado. Puedes seleccionarlo, moverlo o volver a editarlo.');
+}
+function openInlineText(item){
+ if(inlineEditor){if(inlineEditor.item===item)return;finishInlineText()}
+ const field=document.createElement('textarea');
+ field.className='edit-inline-text';field.setAttribute('aria-label','Editar texto directamente en el PDF');
+ field.value=item.text||'';field.placeholder='Escribe aquí';
+ const area=overlay.getBoundingClientRect();
+ field.style.left=(item.x*100)+'%';field.style.top=(item.y*100)+'%';
+ field.style.width=(item.w*100)+'%';field.style.height=Math.max(42,item.h*area.height)+'px';
+ field.style.fontSize=Math.max(12,item.size*area.width/item.baseWidth)+'px';
+ field.onpointerdown=e=>e.stopPropagation();
+ field.oninput=()=>{
+  item.text=field.value;
+  field.style.height='auto';
+  field.style.height=Math.max(42,field.scrollHeight+6)+'px';
+  item.h=Math.min(1-item.y,parseFloat(field.style.height)/Math.max(1,area.height));
+ };
+ field.onkeydown=e=>{
+  if(e.key==='Escape'){e.preventDefault();finishInlineText(true)}
+  else if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();finishInlineText()}
+ };
+ field.onblur=()=>finishInlineText();
+ inlineEditor={field,item,before:item.text||''};
+ overlay.append(field);field.focus();field.select();
+ status('Escribe directamente en la página. Haz clic fuera para dejar el texto colocado.');
+}
 function xy(e){const r=overlay.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))}}
 async function loadFile(file){
  if(!file)return;
@@ -40,6 +77,7 @@ async function loadFile(file){
 }
 async function showPage(index){
  const version=++renderVersion;
+ if(inlineEditor)finishInlineText();
  selectedPage=index;selected=null;
  $('deskewAngle').disabled=false;$('deskewReset').disabled=false;
  $('deskewAngle').value=String(deskew[index]||0);$('deskewValue').textContent=(deskew[index]||0)+'°';
@@ -69,6 +107,7 @@ function renderItems(){
     node.style.lineHeight='1.25';
   }
   node.onpointerdown=e=>{
+    if(item.kind==='text'&&mode==='text'){e.stopPropagation();openInlineText(item);return;}
     if(mode!=='select' && item.kind!=='whiteout')return;
     if(e.target.closest('.whiteout-toolbar,.whiteout-handle'))return;
     e.stopPropagation();
@@ -80,6 +119,7 @@ function renderItems(){
     overlay.setPointerCapture(e.pointerId);
   };
   node.dataset.itemId=String(items.indexOf(item));
+  if(item.kind==='text')node.ondblclick=e=>{e.stopPropagation();openInlineText(item)};
   if(item.kind==='whiteout' && selected===item){
     const toolbar=document.createElement('div');toolbar.className='whiteout-toolbar';
     const color=document.createElement('input');color.type='color';color.value=item.color||'#ffffff';color.title='Color de la cobertura';color.setAttribute('aria-label','Color de la cobertura');
@@ -97,23 +137,31 @@ function renderItems(){
  }
 }
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
- mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));
+ if(inlineEditor)finishInlineText();
+ mode=b.dataset.mode;gesture=null;selected=null;
+ document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));
  $('textSettings').style.display=mode==='text'?'block':'none';
  $('coverSettings').style.display=mode==='whiteout'?'block':'none';
- status(mode==='whiteout'?'Arrastra para cubrir el área incorrecta. Esta cobertura no sirve para censurar datos confidenciales.':mode==='text'?'Haz clic en la página para insertar el texto.':'Arrastra los elementos para ajustar su posición.');
+ renderItems();
+ status(mode==='whiteout'?'Arrastra para cubrir el área incorrecta. Después, haz clic fuera para soltar la cobertura.':mode==='text'?'Haz clic en el documento para escribir directamente. Haz clic fuera para terminar.':'Selecciona un elemento para moverlo. Haz clic en un espacio vacío para soltarlo.');
 });
 overlay.addEventListener('pointerdown',e=>{
  if(!doc)return;
+ if(inlineEditor){finishInlineText();return;}
  const p=xy(e);
  if(samplingColor){
   const c=$('pageCanvas'),rgba=c.getContext('2d').getImageData(Math.min(c.width-1,Math.floor(p.x*c.width)),Math.min(c.height-1,Math.floor(p.y*c.height)),1,1).data;
   $('coverColor').value='#'+Array.from(rgba.slice(0,3)).map(v=>v.toString(16).padStart(2,'0')).join('');
   samplingColor=false;status('Color seleccionado: '+$('coverColor').value);return;
  }
- if(mode==='select')return;
+ if(mode==='select'){
+  if(selected){selected=null;gesture=null;renderItems();status('Elemento soltado. Puedes continuar editando.')}
+  return;
+ }
  if(mode==='text'){
   const page=doc.getPage(selectedPage);
-  add({page:selectedPage,kind:'text',x:p.x,y:p.y,w:.42,h:.06,text:$('textValue').value,size:Number($('fontSize').value)||16,baseWidth:page.getWidth()});
+  const item={page:selectedPage,kind:'text',x:Math.min(p.x,.58),y:Math.min(p.y,.92),w:.42,h:.06,text:$('textValue').value,size:Number($('fontSize').value)||16,baseWidth:page.getWidth()};
+  add(item);openInlineText(item);
  }else if(mode==='whiteout'){
   gesture={start:p,kind:'whiteout'};
   overlay.setPointerCapture(e.pointerId);
@@ -141,11 +189,26 @@ overlay.addEventListener('pointerup',e=>{
  if(gesture.kind==='whiteout'){
   const p=xy(e),a=gesture.start;
   const w=Math.abs(p.x-a.x),h=Math.abs(p.y-a.y);
-  if(w>.003&&h>.003){add({page:selectedPage,kind:'whiteout',x:Math.min(p.x,a.x),y:Math.min(p.y,a.y),w,h,color:$('coverColor').value});document.querySelector('[data-mode="select"]').click();}
+  if(w>.003&&h>.003){
+   add({page:selectedPage,kind:'whiteout',x:Math.min(p.x,a.x),y:Math.min(p.y,a.y),w,h,color:$('coverColor').value});
+   mode='select';
+   document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='select'));
+   $('coverSettings').style.display='none';renderItems();
+   status('Cobertura colocada. Haz clic fuera para soltarla o usa su barra para ajustarla.');
+  }
  }
  gesture=null;
 });
-$('undo').onclick=()=>{if(!items.length)return;items.pop();selected=null;renderItems()};
+overlay.addEventListener('pointercancel',()=>{gesture=null});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&!inlineEditor&&selected){selected=null;gesture=null;renderItems();}
+});
+document.addEventListener('pointerdown',e=>{
+ if(!selected||inlineEditor)return;
+ if(e.target.closest('#overlay'))return;
+ selected=null;gesture=null;renderItems();
+});
+$('undo').onclick=()=>{if(inlineEditor)finishInlineText();if(!items.length)return;items.pop();selected=null;renderItems()};
 $('remove').onclick=()=>{if(!selected)return;items=items.filter(x=>x!==selected);selected=null;renderItems()};
 $('deskewAngle').oninput=e=>{
  if(!doc)return;
@@ -169,6 +232,7 @@ $('zoomOut').onclick=()=>setZoom(zoom-.25);
 $('fitWidth').onclick=async()=>{if(!doc)return;const pg=await viewDoc.getPage(selectedPage+1),base=pg.getViewport({scale:1});const available=document.querySelector('.viewer').clientWidth-55;zoom=Math.max(.5,Math.min(3,available/Math.min(base.width*1.2,900)));await showPage(selectedPage)};
 $('file').onchange=e=>loadFile(e.target.files[0]);
 $('save').onclick=async()=>{
+ if(inlineEditor)finishInlineText();
  if(!doc)return;
  $('save').disabled=true;status('Guardando correcciones…');
  try{
