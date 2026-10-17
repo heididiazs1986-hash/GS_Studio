@@ -290,11 +290,13 @@ document.querySelectorAll('[data-filter]').forEach(el=>el.onclick=()=>setFilter(
 async function showNext(){
  if(source||busy||!queue.length)return;
  busy=true;
- const file=queue.shift();
+ const queued=queue.shift(),file=queued?.file||queued;
  try{
   source=await canvasFromImage(file);
-  const detected=findPaper(source);
-  automaticCrop=!!detected;corners=detected||defaultCorners();
+  wasCameraCapture=!!queued?.captured;
+  const detected=detectWithEngine(source)||queued?.liveCorners||null;
+  automaticCrop=!!detected;
+  corners=detected||queued?.guideCorners||defaultCorners();
   setFilter('enhance',false);
   $('editPanel').hidden=false;$('manualPanel').hidden=true;
   $('quadHint').textContent=automaticCrop?'Bordes estimados: revisa los cuatro puntos.':'Si el recorte no es correcto, mueve manualmente los cuatro puntos.';
@@ -307,7 +309,7 @@ async function showNext(){
 function enqueue(files){
   const accepted=Array.from(files||[]).filter(f=>/^image\/(jpeg|png|webp|heic|heif)$/i.test(f.type));
   if(!accepted.length){status('Selecciona fotografías JPG, PNG, WebP o HEIC compatible con tu teléfono.');return;}
-  queue.push(...accepted);showNext();
+  queue.push(...accepted.map(file=>({file,captured:false})));showNext();
 }
 // Tecno's native Documents camera has already corrected and cropped the page.
 // Import its saved JPEG/PNG directly: NO edge detection, deskew or additional crop.
@@ -354,6 +356,8 @@ $('nativeScansInput').addEventListener('change',async event=>{
 $('galleryInput').addEventListener('change',event=>{enqueue(event.target.files);event.target.value=''});
 $('cameraFallback').addEventListener('change',event=>{enqueue(event.target.files);event.target.value=''});
 function stopCamera(){
+  cameraDetectionToken++;liveCorners=null;lastLiveAt=0;
+  updateCameraDetection(null);
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}
   $('video').srcObject=null;$('cameraPanel').hidden=true;$('startCamera').disabled=false;
 }
@@ -366,6 +370,12 @@ $('startCamera').onclick=async()=>{
     $('video').srcObject=stream;await $('video').play();
     $('cameraPanel').hidden=false;$('startCamera').disabled=true;
     $('cameraPageCount').textContent=String(documents.length);
+    const token=++cameraDetectionToken;
+    updateCameraDetection(null);
+    runLiveDetection(token);
+    window.GSScannerDetector?.load().catch(error=>{
+      console.info('Detector ligero disponible como respaldo:',error.message);
+    });
     status('Cámara abierta. Enfoca el papel y pulsa Capturar hoja.');
   }catch(e){
     stopCamera();status('No fue posible abrir la cámara ('+e.message+'). Usa la cámara del dispositivo.');
@@ -378,13 +388,15 @@ $('takePhoto').onclick=async()=>{
   temp.width=$('video').videoWidth;temp.height=$('video').videoHeight;
   temp.getContext('2d').drawImage($('video'),0,0);
   const photo=await new Promise(resolve=>temp.toBlob(resolve,'image/jpeg',.93));
+  const live=liveCorners&&performance.now()-lastLiveAt<1600?liveCorners.map(p=>({...p})):null;
+  const guide=cameraGuideCorners();
   temp.width=temp.height=1;stopCamera();
   if(!photo){status('No fue posible capturar la foto.');return}
-  queue.push(photo);showNext();
+  queue.push({file:photo,captured:true,liveCorners:live,guideCorners:guide});showNext();
 };
 function resetPhoto(){
   if(source){source.width=source.height=1}
-  source=null;corners=null;cornerIndex=-1;previewReady=false;previewVersion++;
+  wasCameraCapture=false;source=null;corners=null;cornerIndex=-1;previewReady=false;previewVersion++;
   crop.width=crop.height=1;$('previewCanvas').width=$('previewCanvas').height=1;
   $('manualPanel').hidden=true;$('editPanel').hidden=true;
 }
@@ -453,6 +465,7 @@ const makeJpeg=canvas=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?re
 $('addScan').onclick=async()=>{
   if(!source||busy||!previewReady)return;
   busy=true;$('addScan').disabled=true;
+  const reopenCamera=wasCameraCapture&&$('quickMode').checked;
   status('Corrigiendo perspectiva…');await nextFrame();
   try{
     const processed=await preparePage(source,corners,preset);
@@ -462,7 +475,11 @@ $('addScan').onclick=async()=>{
     resetPhoto();renderPages();
     status('Página añadida. Escanea otra hoja o genera el PDF.');
   }catch(e){status('No se pudo preparar la página: '+e.message)}
-  finally{busy=false;$('addScan').disabled=false;showNext()}
+  finally{
+    busy=false;$('addScan').disabled=false;
+    if(queue.length)showNext();
+    else if(reopenCamera&&!source)$('startCamera').click();
+  }
 };
 async function rotate(index){
   const item=documents[index];if(!item)return;
