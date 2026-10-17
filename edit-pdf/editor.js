@@ -101,6 +101,8 @@ function renderItems(){
   node.style.left=(item.x*100)+'%';node.style.top=(item.y*100)+'%';
   node.style.width=(item.w*100)+'%';node.style.height=(item.h*100)+'%';
   if(item.kind==='whiteout')node.style.backgroundColor=item.color||'#ffffff';
+  // While placing text, the white coverage must not intercept clicks on the page.
+  if(item.kind==='whiteout' && mode!=='select')node.style.pointerEvents='none';
   if(item.kind==='text'){
     node.textContent=item.text;node.style.color='#182433';
     node.style.fontSize=Math.max(7,item.size*overlay.getBoundingClientRect().width/item.baseWidth)+'px';
