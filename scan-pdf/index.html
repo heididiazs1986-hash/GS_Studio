@@ -29,7 +29,9 @@ input[type=file]{display:none}
 .camera-shade{position:relative;z-index:1;background:linear-gradient(#0009,#0000);padding:calc(17px + env(safe-area-inset-top)) 16px 42px;display:flex;gap:10px;align-items:start}
 .camera-shade button{background:#0c203acc;color:white;border:1px solid #ffffff55;min-width:48px}
 .camera-shade .camera-title{flex:1;text-align:center;font-size:15px;font-weight:800;padding-top:7px}
-.camera-outline{position:absolute;top:18%;left:8%;width:84%;height:59%;border:2px solid #ff6900a9;border-radius:16px;z-index:1;pointer-events:none;box-shadow:0 0 0 200vmax #07121a24}
+.camera-outline{position:absolute;top:18%;left:8%;width:84%;height:59%;border:2px dashed #ffffff70;border-radius:16px;z-index:1;pointer-events:none;box-shadow:0 0 0 200vmax #07121a1c;transition:border-color .15s}
+#cameraEdges{position:absolute;inset:0;z-index:2;width:100%;height:100%;pointer-events:none}
+.camera-outline.detected{border-color:transparent}
 .camera-outline:before,.camera-outline:after{content:"";position:absolute;inset:9px;border:1px solid #ffffff65;border-radius:9px}
 .camera-bottom{position:relative;z-index:1;margin-top:auto;padding:32px 16px calc(19px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#020c13df 35%);display:grid;grid-template-columns:1fr 100px 1fr;align-items:center;gap:5px;text-align:center}
 .camera-bottom .shutter{width:78px;height:78px;margin:auto;border:5px solid #fff;border-radius:50%;background:var(--orange);box-shadow:0 0 0 5px #ffffff33;min-height:0;padding:0}
@@ -43,6 +45,8 @@ input[type=file]{display:none}
 .filter-row button.active{background:var(--blue);color:white;border-color:var(--blue)}
 .edit-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
 .edit-actions #addScan{grid-column:1/-1;min-height:50px}
+.quick-toggle{display:flex;align-items:center;gap:10px;padding:12px 4px 3px;font-size:12px;color:var(--muted);line-height:1.5}
+.quick-toggle input{height:19px;width:19px;accent-color:var(--orange);flex-shrink:0}
 #manualPanel{background:#f5f7fb;border:1px solid var(--line);border-radius:13px;margin:12px 0;padding:10px}
 #manualPanel h3{margin:3px 0 8px;font-size:14px}
 .edit-surface{display:flex;align-items:center;justify-content:center;background:#dce4ed;border-radius:10px;overflow:hidden;touch-action:none}
@@ -75,7 +79,7 @@ input[type=file]{display:none}
 <main id="scanner" hidden>
 <section id="capturePanel" class="panel">
 <div class="eyebrow">ESCÁNER DOCUMENTAL</div><h1>Escanea tus documentos</h1>
-<p class="hint">Captura una hoja, revisa el resultado y añádela al PDF. Sin OCR y sin subir fotografías a nuestros servidores.</p>
+<p class="hint">Como el modo Documentos de tu Tecno: busca los bordes mientras enfocas, corrige la perspectiva y guarda directamente en PDF, también en Samsung.</p>
 <section class="native-scan" aria-labelledby="nativeScanTitle">
 <div class="native-scan-title" id="nativeScanTitle"><span class="native-scan-icon">✓</span> ¿Ya escaneaste con la cámara del Tecno?</div>
 <p class="hint">Importa las fotos que guardó el modo <b>Documentos</b>. Conservaremos su recorte y las uniremos directamente en un PDF, sin volver a procesar los bordes.</p>
@@ -92,9 +96,9 @@ input[type=file]{display:none}
 </section>
 <section id="cameraPanel" hidden aria-label="Cámara del escáner">
 <video id="video" autoplay muted playsinline></video>
-<div class="camera-outline" aria-hidden="true"></div>
-<div class="camera-shade"><button id="stopCamera" type="button" aria-label="Cerrar cámara">✕</button><div class="camera-title">Centra el documento en el recuadro</div><span style="width:45px"></span></div>
-<div class="camera-bottom"><small>Escáner<br>de documentos</small><div id="cameraControls"><button id="takePhoto" class="shutter" type="button" aria-label="Capturar hoja"></button></div><small><span id="cameraPageCount">0</span><br>páginas</small></div>
+<div class="camera-outline" aria-hidden="true"></div><canvas id="cameraEdges" aria-hidden="true"></canvas>
+<div class="camera-shade"><button id="stopCamera" type="button" aria-label="Cerrar cámara">✕</button><div class="camera-title" id="cameraHint" aria-live="polite">Enfoca una hoja</div><span style="width:45px"></span></div>
+<div class="camera-bottom"><small id="cameraDetection">Buscando<br>bordes…</small><div id="cameraControls"><button id="takePhoto" class="shutter" type="button" aria-label="Capturar hoja"></button></div><small><span id="cameraPageCount">0</span><br>páginas</small></div>
 </section>
 <section id="editPanel" class="panel" hidden>
 <div class="eyebrow">VISTA PREVIA</div><h2>¿Así quedó tu escaneo?</h2>
@@ -115,6 +119,7 @@ input[type=file]{display:none}
 <button id="doneCorners" class="primary" type="button" style="width:100%;margin-top:9px">Ver resultado corregido</button>
 </div>
 <div class="edit-actions"><button id="discard" type="button">Descartar foto</button><button id="retryPhoto" type="button">Repetir foto</button><button id="addScan" class="primary" type="button">Guardar esta página</button></div>
+<label class="quick-toggle"><input id="quickMode" type="checkbox" checked> Continuar automáticamente con la cámara después de guardar cada hoja</label>
 </section>
 <section class="panel" id="pagesPanel"><div class="row" style="justify-content:space-between"><h2>Mi documento</h2><span class="micro" id="pageCount">0 páginas</span></div>
 <div id="pages"><div class="empty">Aquí aparecerán las páginas escaneadas.</div></div>
@@ -127,5 +132,6 @@ input[type=file]{display:none}
 </section>
 </main>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="./detector.js"></script>
 <script src="./scanner.js"></script>
 </body></html>
