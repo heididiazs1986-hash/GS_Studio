@@ -2,67 +2,114 @@
 <html lang="es">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#ffffff"><title>Escanear PDF · GS Studio</title>
+<meta name="theme-color" content="#ffffff">
+<title>Escanear PDF · GS Studio</title>
 <link rel="icon" type="image/svg+xml" href="../gs-studio/icons/studio-logo.svg">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/gs-studio/icons/pwa-192.png"><script defer src="/pwa-register.js"></script>
 <style>
-:root{--orange:#ff6900;--blue:#245881;--ink:#17283c;--muted:#63778f;--line:#d7e0eb;font:15px/1.45 system-ui,"Segoe UI",sans-serif;color:var(--ink);background:#f5f7fa}
-*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer;min-height:44px;border:1px solid #c5d4e2;background:white;color:var(--blue);border-radius:11px;padding:9px 13px;font-weight:650}
-button:disabled{opacity:.45;cursor:not-allowed}.primary{background:var(--orange);border-color:var(--orange);color:#fff}.danger{color:#a62929}
-header{background:#fff;border-bottom:1px solid var(--line);padding:13px 15px;display:flex;gap:12px;align-items:center}
-header img{width:43px;height:43px}header strong{font-size:18px}.micro{font-size:11px;color:var(--muted)}main{padding:12px 12px calc(env(safe-area-inset-bottom) + 18px);max-width:680px;margin:auto}
-.panel{border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;margin-bottom:12px;box-shadow:0 2px 12px #1e38520a}
-h1{font-size:21px;margin:3px 0}h2{font-size:16px;margin:0 0 10px}.hint{font-size:12px;color:var(--muted);margin:7px 0}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.grow{flex:1}
-#gate{padding:45px 20px;text-align:center}#gate h2{font-size:20px}#scanner[hidden],#gate[hidden],[hidden]{display:none!important}
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.actions button{display:flex;justify-content:center;align-items:center;gap:6px}
-#cameraPanel{margin-top:12px}video{display:block;width:100%;border-radius:12px;background:#142130;max-height:65vh;object-fit:contain}#cameraControls{display:flex;gap:8px;margin:10px 0}
-input[type=file]{display:none}label.file-button{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid #b9cada;border-radius:11px;padding:8px;cursor:pointer;color:var(--blue);font-weight:650}
-.edit-surface{background:#e7edf4;border-radius:12px;position:relative;overflow:hidden;touch-action:none}
-#cropCanvas{display:block;width:100%;height:auto;touch-action:none;max-height:67vh;object-fit:contain}
-#quadHint{font-size:12px;color:var(--blue);margin:9px 0}
-.filter-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.filter-row button{font-size:12px;padding:7px 3px}.filter-row button.active{background:var(--blue);border-color:var(--blue);color:white}
-.pages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.scan-page{background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px;touch-action:none;user-select:none}
-.scan-page.dragging{opacity:.55;border-color:var(--blue)}.scan-page.drop-target{outline:3px dashed var(--orange)}
-.scan-page img{width:100%;height:150px;object-fit:contain;background:#f4f6f9;border-radius:7px;display:block;touch-action:none}
-.scan-page .page-meta{font-size:12px;color:var(--muted);margin:6px 0}.scan-page .page-actions{display:flex;gap:7px}.scan-page .page-actions button{min-height:36px;font-size:12px;flex:1;padding:5px}
-.info{background:#eef5fc;color:#245881;border-radius:10px;padding:9px;font-size:12px;min-height:35px}
-#exportBtn{width:100%;min-height:49px;font-size:15px}.empty{color:var(--muted);text-align:center;font-size:13px;padding:22px 8px}
-.small{font-size:12px}
-@media(min-width:768px){main{max-width:680px}}
+:root{--orange:#ff6900;--blue:#245881;--navy:#1b3045;--muted:#657990;--line:#dbe4ee;--paper:#f3f6fa;font:15px/1.4 system-ui,"Segoe UI",sans-serif;color:var(--navy);background:var(--paper)}
+*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer;touch-action:manipulation;min-height:43px;border:1px solid #cbd6e3;background:white;color:var(--blue);border-radius:12px;padding:9px 14px;font-weight:650}
+button:disabled{opacity:.5;cursor:not-allowed}.primary{background:var(--orange);border-color:var(--orange);color:white}.danger{color:#a52d27}
+[hidden]{display:none!important}
+header{background:white;border-bottom:1px solid var(--line);padding:10px 15px;display:flex;align-items:center;gap:11px;position:relative;z-index:2}
+header img{width:38px;height:38px}header strong{font-size:16px;letter-spacing:-.2px}
+.micro,.hint{color:var(--muted);font-size:12px;line-height:1.45}
+main{max-width:650px;margin:auto;padding:12px 12px calc(12px + env(safe-area-inset-bottom))}
+.panel{border:1px solid var(--line);border-radius:17px;background:white;padding:16px;margin:0 0 12px;box-shadow:0 4px 16px #182a3c08}
+.eyebrow{font-size:10px;letter-spacing:.11em;color:var(--orange);font-weight:850;margin-bottom:3px}
+h1{font-size:23px;margin:3px 0 7px;letter-spacing:-.5px}h2{font-size:16px;margin:0 0 10px}
+.hint{margin:7px 0 12px}.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.grow{flex:1}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}
+.actions button,.actions .file-button{min-height:53px}
+input[type=file]{display:none}
+.file-button{display:flex;justify-content:center;align-items:center;text-align:center;padding:8px 10px;border:1px solid #cbd6e3;border-radius:12px;background:white;color:var(--blue);font-weight:700;cursor:pointer}
+#gate{background:#fff;margin:32px 15px;padding:25px;border-radius:15px;text-align:center}
+#cameraPanel{position:fixed;inset:0;z-index:200;background:#09131b;color:white;display:flex;flex-direction:column}
+#video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.camera-shade{position:relative;z-index:1;background:linear-gradient(#0009,#0000);padding:calc(17px + env(safe-area-inset-top)) 16px 42px;display:flex;gap:10px;align-items:start}
+.camera-shade button{background:#0c203acc;color:white;border:1px solid #ffffff55;min-width:48px}
+.camera-shade .camera-title{flex:1;text-align:center;font-size:15px;font-weight:800;padding-top:7px}
+.camera-outline{position:absolute;top:18%;left:8%;width:84%;height:59%;border:2px solid #ff6900a9;border-radius:16px;z-index:1;pointer-events:none;box-shadow:0 0 0 200vmax #07121a24}
+.camera-outline:before,.camera-outline:after{content:"";position:absolute;inset:9px;border:1px solid #ffffff65;border-radius:9px}
+.camera-bottom{position:relative;z-index:1;margin-top:auto;padding:32px 16px calc(19px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#020c13df 35%);display:grid;grid-template-columns:1fr 100px 1fr;align-items:center;gap:5px;text-align:center}
+.camera-bottom .shutter{width:78px;height:78px;margin:auto;border:5px solid #fff;border-radius:50%;background:var(--orange);box-shadow:0 0 0 5px #ffffff33;min-height:0;padding:0}
+.camera-bottom small{color:#fff;line-height:1.3;font-size:12px}
+#cameraControls{display:contents}
+.scan-result{display:flex;justify-content:center;align-items:center;background:#e8edf4;border-radius:13px;min-height:150px;max-height:58vh;overflow:hidden}
+#previewCanvas{display:block;max-width:100%;max-height:56vh;width:auto;height:auto;box-shadow:0 4px 16px #17283d28}
+.result-label{color:var(--blue);font-size:12px;font-weight:750;margin:11px 0 12px}
+.filter-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0 14px}
+.filter-row button{font-size:12px;padding:9px 3px;border-radius:9px}
+.filter-row button.active{background:var(--blue);color:white;border-color:var(--blue)}
+.edit-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.edit-actions #addScan{grid-column:1/-1;min-height:50px}
+#manualPanel{background:#f5f7fb;border:1px solid var(--line);border-radius:13px;margin:12px 0;padding:10px}
+#manualPanel h3{margin:3px 0 8px;font-size:14px}
+.edit-surface{display:flex;align-items:center;justify-content:center;background:#dce4ed;border-radius:10px;overflow:hidden;touch-action:none}
+#cropCanvas{display:block;max-width:100%;max-height:62vh;width:auto;height:auto;touch-action:none}
+#quadHint{font-size:12px;color:var(--blue);margin:8px 0}
+#pages{display:flex;gap:10px;overflow-x:auto;overscroll-behavior-x:contain;padding:5px 1px 11px;scroll-snap-type:x proximity}
+.scan-page{border:1px solid var(--line);border-radius:12px;padding:7px;min-width:137px;width:137px;flex-shrink:0;scroll-snap-align:start;background:#fafbfd}
+.scan-page.dragging{opacity:.65}.scan-page.drop-target{outline:3px dashed var(--orange)}
+.scan-page img{width:100%;height:150px;object-fit:contain;background:#eaf0f6;border-radius:8px;display:block}
+.scan-page .page-meta{font-size:12px;text-align:center;font-weight:750;margin:5px 0}
+.page-actions{display:flex;gap:4px}.page-actions button{padding:5px;min-height:35px;flex:1;font-size:12px}
+.empty{color:var(--muted);text-align:center;padding:28px 8px;width:100%;font-size:13px}
+#exportPanel{position:sticky;bottom:0;z-index:3;box-shadow:0 -8px 26px #142b3b10}
+#exportBtn{width:100%;min-height:49px}
+.info{background:#eef4fa;border-radius:8px;padding:9px;font-size:12px;color:var(--blue);margin:10px 0;min-height:35px}
+#cameraPanel button{font-size:14px}
+@media(min-width:768px){main{display:none}}
 </style>
-<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/gs-studio/icons/pwa-192.png"><script defer src="/pwa-register.js"></script></head>
+</head>
 <body>
-<header><img src="../gs-studio/icons/studio-logo.svg" alt=""><div><strong>GS Studio · Escanear PDF</strong><div class="micro">Centro de gestión documental - Gestión Social</div></div></header>
-<section id="gate" hidden><h2>Escanear PDF es exclusivo para celular 📱</h2><p>Abre GS Studio desde tu teléfono para escanear con su cámara.</p><a href="../gs-studio/">Volver a GS Studio</a></section>
+<header><img src="../gs-studio/icons/studio-logo.svg" alt=""><div><strong>GS Studio · Escanear</strong><div class="micro">Centro de gestión documental - Gestión Social</div></div></header>
+<section id="gate" hidden><h2>Escáner disponible en celular</h2><p>Abre GS Studio desde tu teléfono para escanear documentos con la cámara.</p><a href="../gs-studio/">Volver a GS Studio</a></section>
 <main id="scanner" hidden>
-<section class="panel"><div class="micro">ESCÁNER DOCUMENTAL</div><h1>Escanear documentos</h1>
-<p class="hint">Captura tus hojas, corrige su perspectiva y crea un solo PDF. Sin OCR y sin enviar tus fotos a nuestros servidores.</p>
-<div class="actions"><button class="primary" id="startCamera" type="button">Abrir cámara</button>
-<label class="file-button" for="galleryInput">Elegir fotografías</label></div>
-<input type="file" id="galleryInput" accept="image/*" multiple>
-<input type="file" id="cameraFallback" accept="image/*" capture="environment">
-<div id="cameraPanel" hidden><video id="video" autoplay muted playsinline></video>
-<div id="cameraControls"><button id="takePhoto" class="primary grow">Capturar hoja</button><button id="stopCamera">Cerrar cámara</button></div>
-</div></section>
-<section class="panel" id="editPanel" hidden><h2>Preparar escaneo</h2>
-<p class="hint">Arrastra los cuatro puntos naranjas hasta las esquinas de la hoja. La detección automática es orientativa: verifica antes de aceptar.</p>
-<div class="edit-surface"><canvas id="cropCanvas" width="320" height="420" aria-label="Ajustar las cuatro esquinas del documento"></canvas></div>
-<div id="quadHint" role="status"></div>
-<div class="row"><button id="autoBounds" class="grow">Detectar bordes</button><button id="resetBounds" class="grow">Restablecer esquinas</button></div>
-<h2 style="margin-top:15px">Acabado</h2><div class="filter-row" id="filters">
-<button data-filter="color">Color</button><button data-filter="enhance" class="active">Mejorado</button><button data-filter="gray">Grises</button><button data-filter="bw">B/N</button>
+<section id="capturePanel" class="panel">
+<div class="eyebrow">ESCÁNER DOCUMENTAL</div><h1>Escanea tus documentos</h1>
+<p class="hint">Captura una hoja, revisa el resultado y añádela al PDF. Sin OCR y sin subir fotografías a nuestros servidores.</p>
+<div class="actions">
+<button class="primary" type="button" id="startCamera">Abrir cámara</button>
+<label class="file-button" for="galleryInput">Elegir fotos</label>
 </div>
-<p class="hint">Mejorado realza contraste. Blanco y negro puede perder detalles finos: úsalo solo cuando el texto se vea claro.</p>
-<div class="row"><button id="discard" class="grow">Descartar foto</button><button id="addScan" class="primary grow">Añadir página</button></div>
+<input id="galleryInput" type="file" accept="image/*" multiple>
+<input id="cameraFallback" type="file" accept="image/*" capture="environment">
 </section>
-<section class="panel"><div class="row" style="justify-content:space-between"><h2>Páginas escaneadas</h2><strong id="pageCount" class="micro">0 páginas</strong></div>
-<div id="pages" class="pages"><div class="empty">Tus páginas aparecerán aquí.</div></div>
-<p class="hint">Mantén pulsada una miniatura y arrástrala para cambiar el orden. También puedes girarla o eliminarla.</p>
+<section id="cameraPanel" hidden aria-label="Cámara del escáner">
+<video id="video" autoplay muted playsinline></video>
+<div class="camera-outline" aria-hidden="true"></div>
+<div class="camera-shade"><button id="stopCamera" type="button" aria-label="Cerrar cámara">✕</button><div class="camera-title">Centra el documento en el recuadro</div><span style="width:45px"></span></div>
+<div class="camera-bottom"><small>Escáner<br>de documentos</small><div id="cameraControls"><button id="takePhoto" class="shutter" type="button" aria-label="Capturar hoja"></button></div><small><span id="cameraPageCount">0</span><br>páginas</small></div>
 </section>
-<section class="panel"><button id="exportBtn" class="primary" disabled>Generar y descargar PDF</button>
-<p id="status" class="info" role="status">Listo para comenzar. Autoriza la cámara solo cuando quieras usarla.</p>
-<p class="hint">Después de iniciar la descarga, GS Studio limpia las fotografías y vistas previas de esta sesión. Conserva el PDF descargado.</p>
+<section id="editPanel" class="panel" hidden>
+<div class="eyebrow">VISTA PREVIA</div><h2>¿Así quedó tu escaneo?</h2>
+<div class="scan-result"><canvas id="previewCanvas" width="200" height="280" aria-label="Vista previa del escaneo corregido"></canvas></div>
+<div class="result-label" id="previewHint">Revisa que se vea toda la hoja.</div>
+<div class="filter-row" id="filters">
+<button type="button" data-filter="color">Color</button>
+<button type="button" data-filter="enhance" class="active">Mejorado</button>
+<button type="button" data-filter="gray">Grises</button>
+<button type="button" data-filter="bw">B/N</button>
+</div>
+<button id="editCornersBtn" type="button" style="width:100%">Ajustar recorte y esquinas</button>
+<div id="manualPanel" hidden>
+<h3>Recorte manual</h3><p class="hint">Mueve los cuatro puntos naranjas a las esquinas reales de la hoja.</p>
+<div class="edit-surface"><canvas id="cropCanvas" width="320" height="420" aria-label="Ajustar manualmente las cuatro esquinas del documento"></canvas></div>
+<p id="quadHint" role="status"></p>
+<div class="row"><button id="autoBounds" class="grow" type="button">Detectar bordes</button><button id="resetBounds" class="grow" type="button">Restablecer</button></div>
+<button id="doneCorners" class="primary" type="button" style="width:100%;margin-top:9px">Ver resultado corregido</button>
+</div>
+<div class="edit-actions"><button id="discard" type="button">Descartar foto</button><button id="retryPhoto" type="button">Repetir foto</button><button id="addScan" class="primary" type="button">Guardar esta página</button></div>
+</section>
+<section class="panel" id="pagesPanel"><div class="row" style="justify-content:space-between"><h2>Mi documento</h2><span class="micro" id="pageCount">0 páginas</span></div>
+<div id="pages"><div class="empty">Aquí aparecerán las páginas escaneadas.</div></div>
+<p class="hint">Puedes reordenar las miniaturas, girarlas o eliminar una página antes de descargar el PDF.</p>
+</section>
+<section id="exportPanel" class="panel">
+<button id="exportBtn" class="primary" disabled>Guardar documento PDF</button>
+<p id="status" class="info" role="status">Abre la cámara o selecciona una fotografía para comenzar.</p>
+<p class="hint" style="margin-bottom:0">No guardamos tus fotos en nuestros servidores. Al iniciar la descarga se limpia la sesión.</p>
 </section>
 </main>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
