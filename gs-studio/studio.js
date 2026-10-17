@@ -63,7 +63,7 @@
     if (retain) render();
   }
   // Landscape-oriented phones keep scanner access; desktop does not show this control.
-  if(/iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent)){
+  if(navigator.userAgentData?.mobile===true || /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent)){
     document.querySelectorAll('.scan-mobile-only').forEach(card=>card.style.display='block');
   }
   document.querySelectorAll('[data-tool]').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
