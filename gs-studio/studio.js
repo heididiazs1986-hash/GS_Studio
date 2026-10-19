@@ -61,6 +61,7 @@
   }
   function setTool(next, retain = false) {
     if (next === 'edit') { window.location.href = '../edit-pdf/'; return; }
+    if (next === 'sign' && !retain) { window.location.href = '../sign-pdf/'; return; }
     if (next === 'scan') { window.location.href = '../scan-pdf/'; return; }
     if (next === 'editor') {
       inEditor = true;
