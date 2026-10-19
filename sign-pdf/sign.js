@@ -166,7 +166,8 @@ function renderStamps(){
       e.stopPropagation();e.preventDefault();
       const resizing=e.target.classList.contains('grip');
       selectedId=item.id;placing=false;layer.classList.remove('placing');
-      if(!node.classList.contains('selected')){renderStamps();return}
+      // A first touch should immediately allow dragging, even before the floating toolbar appears.
+      node.classList.add('selected');
       const start=relativePoint(e);
       const baseline={x:item.x,y:item.y,w:item.w,h:item.h};
       node.setPointerCapture(e.pointerId);
@@ -335,19 +336,34 @@ const cropPoint=e=>{
 };
 $('processCanvas').addEventListener('pointerdown',e=>{
   if(!cropSource||!cropBox)return;e.preventDefault();
-  const p=cropPoint(e),q=cropBox;
+  const p=cropPoint(e),q=cropBox,c=$('processCanvas');
+  const tol=Math.max(12,c.width*.021);
+  const corners=[
+    {key:'tl',x:q.x,y:q.y},{key:'tr',x:q.x+q.w,y:q.y},
+    {key:'br',x:q.x+q.w,y:q.y+q.h},{key:'bl',x:q.x,y:q.y+q.h}
+  ];
+  const handle=corners.find(k=>Math.abs(p.x-k.x)<tol&&Math.abs(p.y-k.y)<tol);
   const within=p.x>=q.x&&p.x<=q.x+q.w&&p.y>=q.y&&p.y<=q.y+q.h;
-  cropGesture={p,rect:{...q},mode:within?'move':'new'};
-  $('processCanvas').setPointerCapture(e.pointerId);
+  cropGesture={p,rect:{...q},mode:handle?.key|| (within?'move':'new')};
+  c.setPointerCapture(e.pointerId);
 });
 $('processCanvas').addEventListener('pointermove',e=>{
   if(!cropGesture)return;
-  const p=cropPoint(e),origin=cropGesture.p,initial=cropGesture.rect;
-  if(cropGesture.mode==='move'){
-    cropBox={...initial,x:clamp(initial.x+p.x-origin.x,0,cropSource.width-initial.w),y:clamp(initial.y+p.y-origin.y,0,cropSource.height-initial.h)};
-  }else{
+  const p=cropPoint(e),origin=cropGesture.p,initial=cropGesture.rect,mode=cropGesture.mode;
+  if(mode==='move'){
+    cropBox={...initial,x:clamp(initial.x+p.x-origin.x,0,cropSource.width-initial.w),
+      y:clamp(initial.y+p.y-origin.y,0,cropSource.height-initial.h)};
+  }else if(mode==='new'){
     const x=Math.min(origin.x,p.x),y=Math.min(origin.y,p.y);
-    cropBox={x,y,w:Math.max(5,Math.abs(p.x-origin.x)),h:Math.max(5,Math.abs(p.y-origin.y))};
+    cropBox={x,y,w:Math.max(5,Math.min(cropSource.width-x,Math.abs(p.x-origin.x))),
+      h:Math.max(5,Math.min(cropSource.height-y,Math.abs(p.y-origin.y)))};
+  }else{
+    const x2=initial.x+initial.w,y2=initial.y+initial.h;
+    const left=mode.endsWith('l')?clamp(p.x,0,x2-8):initial.x;
+    const right=mode.endsWith('r')?clamp(p.x,initial.x+8,cropSource.width):x2;
+    const top=mode.startsWith('t')?clamp(p.y,0,y2-8):initial.y;
+    const bottom=mode.startsWith('b')?clamp(p.y,initial.y+8,cropSource.height):y2;
+    cropBox={x:left,y:top,w:right-left,h:bottom-top};
   }
   paintImageCrop();
 });
