@@ -5,6 +5,35 @@
   const labels = { merge: 'Unir PDF', images: 'Imágenes a PDF', organize: 'Organizar PDF', split: 'Dividir PDF', sign: 'Firmar PDF' };
   const order = ['TD', 'E1', 'E6', 'AR', 'DJ', 'RETIE', 'EC'];
   let tool = 'merge', pages = [], signatureFile = null, signDirty = false, inEditor = false;
+  const imageOptionDefaults = {imageOrientation:'auto',imagePageSize:'image',imageMargin:'0',imageFit:'contain'};
+  const getImageOptions = () => Object.fromEntries(Object.keys(imageOptionDefaults).map(key=>[key,$(key).value]));
+  const imageDpi = 150; // Photos use 150 pixels per inch for "Tamaño original".
+  function imageLayout(imageWidth,imageHeight,rotation=0,options=getImageOptions()){
+    const angle=((rotation%360)+360)%360,quarter=angle===90||angle===270;
+    const rw=quarter?imageHeight:imageWidth,rh=quarter?imageWidth:imageHeight;
+    const margin=Number(options.imageMargin)||0;
+    let sheetWidth,sheetHeight;
+    if(options.imagePageSize==='a4'){sheetWidth=595.276;sheetHeight=841.89;}
+    else if(options.imagePageSize==='letter'){sheetWidth=612;sheetHeight=792;}
+    else{sheetWidth=rw*72/imageDpi+margin*2;sheetHeight=rh*72/imageDpi+margin*2;}
+    const landscape=options.imageOrientation==='auto'?rw>rh:options.imageOrientation==='landscape';
+    if(landscape && sheetHeight>sheetWidth || !landscape && sheetWidth>sheetHeight){
+      [sheetWidth,sheetHeight]=[sheetHeight,sheetWidth];
+    }
+    const availableWidth=sheetWidth-2*margin,availableHeight=sheetHeight-2*margin;
+    if(availableWidth<=0||availableHeight<=0)throw new Error('Los márgenes superan el tamaño de la página.');
+    const contain=Math.min(availableWidth/rw,availableHeight/rh);
+    const cover=Math.max(availableWidth/rw,availableHeight/rh);
+    const fit=options.imageFit||'contain';
+    const scale=fit==='cover'?cover:fit==='original'?Math.min(contain,72/imageDpi):contain;
+    const visibleWidth=rw*scale,visibleHeight=rh*scale;
+    const left=margin+(availableWidth-visibleWidth)/2;
+    const bottom=margin+(availableHeight-visibleHeight)/2;
+    return {sheetWidth,sheetHeight,margin,availableWidth,availableHeight,fit,angle,
+      imageWidth,imageHeight,rw,rh,scale,
+      imageDrawWidth:imageWidth*scale,imageDrawHeight:imageHeight*scale,
+      visibleWidth,visibleHeight,left,bottom};
+  }
   const signature = $('signCanvas'), ink = signature.getContext('2d');
   ink.lineWidth = 4; ink.lineCap = 'round'; ink.lineJoin = 'round'; ink.strokeStyle = '#162033';
   const say = value => { $('message').textContent = value; };
@@ -13,6 +42,7 @@
   }
   function clear() {
     pages = [];
+    for(const [id,value] of Object.entries(imageOptionDefaults))$(id).value=value;
     $('fileInput').value = '';
     $('pages').replaceChildren();
     $('exportBtn').disabled = true;
@@ -48,18 +78,20 @@
     $('signTools').classList.toggle('hidden', next !== 'sign');
     $('splitTools').classList.toggle('hidden', next !== 'split');
     $('signResultBtn').classList.toggle('hidden', next === 'merge' || !(next === 'organize' && pages.length));
+    $('imagePdfOptions').classList.toggle('hidden',next!=='images');
+    $('imageReorderHint').classList.toggle('hidden',next!=='images');
     $('fileInput').multiple = next === 'images' || next === 'merge';
     $('fileInput').accept = next === 'images' ? 'image/png,image/jpeg,.png,.jpg,.jpeg' : '.pdf,.zip,application/pdf,application/zip';
     $('dropFormats').textContent = next === 'images' ? 'Admite JPG y PNG' : 'Admite PDF y ZIP con documentos PDF';
     $('toolHint').textContent = next === 'images'
-      ? 'Selecciona imágenes JPG o PNG y organízalas antes de generar el PDF.'
+      ? 'Selecciona imágenes JPG o PNG. Gíralas, arrástralas para cambiar su orden y elige cómo ocuparán las hojas del PDF.'
       : next === 'sign'
       ? 'Dibuja tu firma manuscrita o carga su imagen. Pulsa sobre la vista previa para elegir su ubicación.'
       : next === 'split'
       ? 'Abre un PDF y especifica el intervalo de páginas que deseas extraer.'
       : next === 'merge' ? 'Cada tarjeta representa un documento completo. Arrastra los archivos para definir el orden final de unión.'
       : 'Abre documentos PDF o un ZIP de GS Documentos y organiza sus páginas.';
-    $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : 'Generar PDF';
+    $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : next === 'images' ? 'Generar PDF organizado' : 'Generar PDF';
     if (retain) render();
   }
   // Landscape-oriented phones keep scanner access; desktop does not show this control.
@@ -471,24 +503,23 @@
 
   async function appendPage(output, entry) {
     if (entry.type === 'image') {
-      const bytes = new Uint8Array(await entry.file.arrayBuffer());
-      const image = entry.file.type === 'image/png' ? await output.embedPng(bytes) : await output.embedJpg(bytes);
-      const width = 595, height = 842, margin = 26;
-      const rotation = ((entry.rotation || 0) % 360 + 360) % 360;
-      const quarterTurn = rotation === 90 || rotation === 270;
-      const rotatedWidth = quarterTurn ? image.height : image.width;
-      const rotatedHeight = quarterTurn ? image.width : image.height;
-      const scale = Math.min((width - margin * 2) / rotatedWidth, (height - margin * 2) / rotatedHeight);
-      const w = image.width * scale, h = image.height * scale;
-      const baseX = (width - rotatedWidth * scale) / 2;
-      const baseY = (height - rotatedHeight * scale) / 2;
-      // PDF Y grows upwards (opposite of canvas). Preserve original JPG/PNG bytes;
-      // rotate by -angle so exported pages match the clockwise on-screen preview.
-      const pdfRotation = (360 - rotation) % 360;
-      const x = baseX + (pdfRotation === 90 ? h : pdfRotation === 180 ? w : 0);
-      const y = baseY + (pdfRotation === 180 ? h : pdfRotation === 270 ? w : 0);
-      const pg = output.addPage([width, height]);
-      pg.drawImage(image, { x, y, width: w, height: h, rotate: PDFLib.degrees(pdfRotation) });
+      const bytes=new Uint8Array(await entry.file.arrayBuffer());
+      const image=entry.file.type==='image/png'?await output.embedPng(bytes):await output.embedJpg(bytes);
+      const layout=imageLayout(image.width,image.height,entry.rotation||0);
+      const {sheetWidth,sheetHeight,visibleWidth,visibleHeight,left,bottom,angle,
+             imageDrawWidth:w,imageDrawHeight:h,margin,availableWidth,availableHeight,fit}=layout;
+      const pg=output.addPage([sheetWidth,sheetHeight]);
+      const pdfRotation=(360-angle)%360;
+      const x=left+(pdfRotation===90?h:pdfRotation===180?w:0);
+      const y=bottom+(pdfRotation===180?h:pdfRotation===270?w:0);
+      if(fit==='cover'&&margin>0){
+        // Crop overspill to content area, preserving user-selected margins.
+        pg.pushOperators(PDFLib.pushGraphicsState(),
+          PDFLib.rectangle(margin,margin,availableWidth,availableHeight),
+          PDFLib.clip(),PDFLib.endPath());
+      }
+      pg.drawImage(image,{x,y,width:w,height:h,rotate:PDFLib.degrees(pdfRotation)});
+      if(fit==='cover'&&margin>0)pg.pushOperators(PDFLib.popGraphicsState());
       return pg;
     }
     const [page] = await output.copyPages(entry.source.doc, [entry.index]);
