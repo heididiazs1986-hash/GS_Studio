@@ -281,6 +281,26 @@
     });
   }
   let drag = null;
+  // Repaint only visible image thumbnails when changing layout options.
+  function refreshImagePreviews(){
+    if(tool!=='images')return;
+    document.querySelectorAll('#pages .page').forEach((card,index)=>{
+      const canvas=card.querySelector('canvas');
+      if(pages[index]?.type==='image'&&canvas)drawPagePreview(pages[index],canvas);
+    });
+  }
+  for(const id of Object.keys(imageOptionDefaults)){
+    $(id).addEventListener('change',()=>{
+      if(tool!=='images')return;
+      const options=getImageOptions();
+      $('imagePdfHint').textContent=options.imageFit==='cover'
+        ?'«Llenar hoja» puede recortar los extremos de la fotografía. Comprueba las miniaturas antes de generar el PDF.'
+        :options.imagePageSize==='image'&&options.imageMargin==='0'
+          ?'Cada hoja tendrá la proporción de su fotografía, sin márgenes añadidos ni pérdida de información.'
+          :'La página respeta la configuración elegida. «Completa» conserva toda la imagen, aunque puedan quedar márgenes.';
+      refreshImagePreviews();
+    });
+  }
   function reorder(from, to) {
     if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) return;
     const [page] = pages.splice(from, 1);
@@ -330,6 +350,18 @@
     const host = $('pages'); host.replaceChildren();
     pages.forEach((entry, index) => {
       const card = document.createElement('article'); card.className = 'page';
+      if(entry.type==='image'){
+        card.classList.add('image-page');
+        card.tabIndex=0;
+        card.setAttribute('aria-label','Imagen '+(index+1)+'. Arrastra para reorganizar o utiliza Alt y flechas.');
+        card.addEventListener('keydown',event=>{
+          if(!event.altKey || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+          event.preventDefault();
+          const delta=event.key==='ArrowLeft'||event.key==='ArrowUp'?-1:1;
+          const next=Math.max(0,Math.min(pages.length-1,index+delta));
+          if(next!==index){reorder(index,next);$('pages').children[next]?.focus();}
+        });
+      }
       const canvas = document.createElement('canvas'); card.append(canvas);
       const caption = document.createElement('div');
       caption.textContent = (index + 1) + '. ' + entry.label +
@@ -351,9 +383,24 @@
         };
         add('↶', 'Girar 90° a la izquierda', () => rotateImage(270));
         add('↷', 'Girar 90° a la derecha', () => rotateImage(90));
+        add('⇄', 'Mover a cualquier posición', () => {
+          const value=window.prompt('Mover imagen '+(index+1)+' a la posición (1-'+pages.length+'):',String(index+1));
+          if(value===null)return;
+          const target=Number(value);
+          if(!Number.isInteger(target)||target<1||target>pages.length){
+            say('Indica un número entre 1 y '+pages.length+'.');return;
+          }
+          reorder(index,target-1);
+        });
       }
       if (entry.type === 'pdf') add('↻', 'Girar 90°', () => { entry.rotation = (entry.rotation + 90) % 360; render(); });
       add('×', 'Eliminar de la selección', () => { pages.splice(index, 1); render(); });
+      if(entry.type==='image'){
+        nav.classList.add('image-card-toolbar');
+        const info=document.createElement('div');info.className='page-move-hint';
+        info.textContent='Arrastra para cambiar el orden';card.append(info);
+        const remove=nav.lastElementChild;if(remove)remove.classList.add('remove-image');
+      }
       card.append(nav); host.append(card); drawPagePreview(entry, canvas);
       if (tool !== 'sign') { card.title = tool === 'merge' ? 'Arrastra el documento completo para cambiar su orden' : 'Arrastra esta página a otra posición'; setupDrag(card, index); }
       if (tool === 'sign' && entry.type === 'pdf') {
