@@ -178,8 +178,11 @@
     if (entry.type === 'image') {
       const url = URL.createObjectURL(entry.file);
       const image = new Image();
+      const renderToken = String(Number(canvas.dataset.renderToken || 0) + 1);
+      canvas.dataset.renderToken = renderToken;
       image.onload = () => {
         try {
+          if (!canvas.isConnected || canvas.dataset.renderToken !== renderToken) return;
           // Canvas uses positive clockwise rotation, matching the preview buttons.
           const rotation = ((entry.rotation || 0) % 360 + 360) % 360;
           const quarterTurn = rotation === 90 || rotation === 270;
@@ -282,15 +285,18 @@
       const nav = document.createElement('nav');
       const add = (label, title, action, disabled = false) => {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
-        button.title = title; button.disabled = disabled; button.addEventListener('click', action); nav.append(button);
+        button.title = title; button.setAttribute('aria-label', title); button.disabled = disabled; button.addEventListener('click', action); nav.append(button);
       };
       if (entry.type === 'image') {
-        add('↶', 'Girar 90° a la izquierda', () => {
-          entry.rotation = (entry.rotation + 270) % 360; render();
-        });
-        add('↷', 'Girar 90° a la derecha', () => {
-          entry.rotation = (entry.rotation + 90) % 360; render();
-        });
+        const rotateImage = delta => {
+          entry.rotation = (entry.rotation + delta + 360) % 360;
+          caption.textContent = (index + 1) + '. ' + entry.label +
+            (entry.rotation ? ' · Giro ' + entry.rotation + '°' : '');
+          // Update this thumbnail only; a whole-grid rerender is expensive for many images.
+          drawPagePreview(entry, canvas);
+        };
+        add('↶', 'Girar 90° a la izquierda', () => rotateImage(270));
+        add('↷', 'Girar 90° a la derecha', () => rotateImage(90));
       }
       if (entry.type === 'pdf') add('↻', 'Girar 90°', () => { entry.rotation = (entry.rotation + 90) % 360; render(); });
       add('×', 'Eliminar de la selección', () => { pages.splice(index, 1); render(); });
