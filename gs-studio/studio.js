@@ -206,31 +206,53 @@
     if (event.dataTransfer?.types?.includes('Files')) event.preventDefault();
   });
 
-  function drawPagePreview(entry, canvas) {
-    if (entry.type === 'image') {
-      const url = URL.createObjectURL(entry.file);
-      const image = new Image();
-      const renderToken = String(Number(canvas.dataset.renderToken || 0) + 1);
-      canvas.dataset.renderToken = renderToken;
-      image.onload = () => {
-        try {
-          if (!canvas.isConnected || canvas.dataset.renderToken !== renderToken) return;
-          // Canvas uses positive clockwise rotation, matching the preview buttons.
-          const rotation = ((entry.rotation || 0) % 360 + 360) % 360;
-          const quarterTurn = rotation === 90 || rotation === 270;
-          const rotatedWidth = quarterTurn ? image.height : image.width;
-          const rotatedHeight = quarterTurn ? image.width : image.height;
-          const ratio = Math.min(160 / rotatedWidth, 180 / rotatedHeight, 1);
-          canvas.width = Math.max(1, Math.round(rotatedWidth * ratio));
-          canvas.height = Math.max(1, Math.round(rotatedHeight * ratio));
-          const context = canvas.getContext('2d');
-          context.translate(canvas.width / 2, canvas.height / 2);
-          context.rotate(rotation * Math.PI / 180);
-          context.drawImage(image, -image.width * ratio / 2, -image.height * ratio / 2, image.width * ratio, image.height * ratio);
-        } finally { URL.revokeObjectURL(url); }
+  // Keep a small thumbnail per source image to avoid reopening large phone photos
+  // whenever the user changes a setting or moves a card.
+  function imageThumbnail(entry){
+    if(entry.thumbnailPromise)return entry.thumbnailPromise;
+    entry.thumbnailPromise=new Promise((resolve,reject)=>{
+      const url=URL.createObjectURL(entry.file),picture=new Image();
+      picture.onload=()=>{
+        try{
+          const factor=Math.min(1,440/Math.max(picture.naturalWidth,picture.naturalHeight));
+          const thumb=document.createElement('canvas');
+          thumb.width=Math.max(1,Math.round(picture.naturalWidth*factor));
+          thumb.height=Math.max(1,Math.round(picture.naturalHeight*factor));
+          thumb.getContext('2d').drawImage(picture,0,0,thumb.width,thumb.height);
+          resolve({thumb,width:picture.naturalWidth,height:picture.naturalHeight});
+        }catch(e){reject(e)}finally{URL.revokeObjectURL(url)}
       };
-      image.onerror = () => { URL.revokeObjectURL(url); };
-      image.src = url;
+      picture.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('No se pudo abrir la imagen.'))};
+      picture.src=url;
+    });
+    return entry.thumbnailPromise;
+  }
+  function drawPagePreview(entry, canvas) {
+    if(entry.type==='image'){
+      const token=String(Number(canvas.dataset.renderToken||0)+1);
+      canvas.dataset.renderToken=token;
+      imageThumbnail(entry).then(({thumb,width,height})=>{
+        if(!canvas.isConnected||canvas.dataset.renderToken!==token)return;
+        const layout=imageLayout(width,height,entry.rotation||0);
+        const thumbScale=Math.min(160/layout.sheetWidth,180/layout.sheetHeight);
+        canvas.width=Math.max(1,Math.round(layout.sheetWidth*thumbScale));
+        canvas.height=Math.max(1,Math.round(layout.sheetHeight*thumbScale));
+        const context=canvas.getContext('2d');
+        context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
+        context.save();
+        // The preview uses the exact export crop box and orientation.
+        context.beginPath();
+        context.rect(layout.margin*thumbScale,layout.margin*thumbScale,
+          layout.availableWidth*thumbScale,layout.availableHeight*thumbScale);
+        context.clip();
+        context.translate((layout.left+layout.visibleWidth/2)*thumbScale,
+          (layout.sheetHeight-layout.bottom-layout.visibleHeight/2)*thumbScale);
+        context.rotate(layout.angle*Math.PI/180);
+        context.drawImage(thumb,-layout.imageDrawWidth*thumbScale/2,
+          -layout.imageDrawHeight*thumbScale/2,
+          layout.imageDrawWidth*thumbScale,layout.imageDrawHeight*thumbScale);
+        context.restore();
+      }).catch(()=>{if(canvas.isConnected){const note=document.createElement('span');note.className='note';note.textContent='Imagen no disponible';canvas.replaceWith(note)}});
       return;
     }
     if (!window.pdfjsLib) {
