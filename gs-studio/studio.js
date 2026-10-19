@@ -116,7 +116,7 @@
     for (const file of input) {
       if (tool === 'images') {
         if (!/^(image\/png|image\/jpeg)$/.test(file.type)) throw new Error('Solo se aceptan imágenes JPG y PNG.');
-        incoming.push({ type: 'image', file, label: file.name });
+        incoming.push({ type: 'image', file, label: file.name, rotation: 0 });
       } else if (isZip(file.name)) {
         incoming.push(...await unpackZip(file));
       } else if (isPdf(file.name)) {
@@ -132,7 +132,7 @@
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     say('Abriendo archivos…');
-    try { await readFiles(files, tool === 'merge' && pages.length > 0); }
+    try { await readFiles(files, (tool === 'merge' || tool === 'images') && pages.length > 0); }
     catch (error) { say('Error: ' + error.message); }
     finally { $('fileInput').value = ''; }
   });
@@ -179,11 +179,20 @@
       const url = URL.createObjectURL(entry.file);
       const image = new Image();
       image.onload = () => {
-        const ratio = Math.min(160 / image.width, 180 / image.height, 1);
-        canvas.width = Math.max(1, Math.round(image.width * ratio));
-        canvas.height = Math.max(1, Math.round(image.height * ratio));
-        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(url);
+        try {
+          // Canvas uses positive clockwise rotation, matching the preview buttons.
+          const rotation = ((entry.rotation || 0) % 360 + 360) % 360;
+          const quarterTurn = rotation === 90 || rotation === 270;
+          const rotatedWidth = quarterTurn ? image.height : image.width;
+          const rotatedHeight = quarterTurn ? image.width : image.height;
+          const ratio = Math.min(160 / rotatedWidth, 180 / rotatedHeight, 1);
+          canvas.width = Math.max(1, Math.round(rotatedWidth * ratio));
+          canvas.height = Math.max(1, Math.round(rotatedHeight * ratio));
+          const context = canvas.getContext('2d');
+          context.translate(canvas.width / 2, canvas.height / 2);
+          context.rotate(rotation * Math.PI / 180);
+          context.drawImage(image, -image.width * ratio / 2, -image.height * ratio / 2, image.width * ratio, image.height * ratio);
+        } finally { URL.revokeObjectURL(url); }
       };
       image.onerror = () => { URL.revokeObjectURL(url); };
       image.src = url;
@@ -265,12 +274,24 @@
     pages.forEach((entry, index) => {
       const card = document.createElement('article'); card.className = 'page';
       const canvas = document.createElement('canvas'); card.append(canvas);
-      const caption = document.createElement('div'); caption.textContent = (index + 1) + '. ' + entry.label + (entry.type === 'document' ? ' · ' + entry.source.doc.getPageCount() + ' página(s)' : ''); card.append(caption);
+      const caption = document.createElement('div');
+      caption.textContent = (index + 1) + '. ' + entry.label +
+        (entry.type === 'document' ? ' · ' + entry.source.doc.getPageCount() + ' página(s)' :
+        entry.type === 'image' && entry.rotation ? ' · Giro ' + entry.rotation + '°' : '');
+      card.append(caption);
       const nav = document.createElement('nav');
       const add = (label, title, action, disabled = false) => {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
         button.title = title; button.disabled = disabled; button.addEventListener('click', action); nav.append(button);
       };
+      if (entry.type === 'image') {
+        add('↶', 'Girar 90° a la izquierda', () => {
+          entry.rotation = (entry.rotation + 270) % 360; render();
+        });
+        add('↷', 'Girar 90° a la derecha', () => {
+          entry.rotation = (entry.rotation + 90) % 360; render();
+        });
+      }
       if (entry.type === 'pdf') add('↻', 'Girar 90°', () => { entry.rotation = (entry.rotation + 90) % 360; render(); });
       add('×', 'Eliminar de la selección', () => { pages.splice(index, 1); render(); });
       card.append(nav); host.append(card); drawPagePreview(entry, canvas);
@@ -447,10 +468,21 @@
       const bytes = new Uint8Array(await entry.file.arrayBuffer());
       const image = entry.file.type === 'image/png' ? await output.embedPng(bytes) : await output.embedJpg(bytes);
       const width = 595, height = 842, margin = 26;
-      const scale = Math.min((width - margin * 2) / image.width, (height - margin * 2) / image.height);
+      const rotation = ((entry.rotation || 0) % 360 + 360) % 360;
+      const quarterTurn = rotation === 90 || rotation === 270;
+      const rotatedWidth = quarterTurn ? image.height : image.width;
+      const rotatedHeight = quarterTurn ? image.width : image.height;
+      const scale = Math.min((width - margin * 2) / rotatedWidth, (height - margin * 2) / rotatedHeight);
       const w = image.width * scale, h = image.height * scale;
+      const baseX = (width - rotatedWidth * scale) / 2;
+      const baseY = (height - rotatedHeight * scale) / 2;
+      // PDF Y grows upwards (opposite of canvas). Preserve original JPG/PNG bytes;
+      // rotate by -angle so exported pages match the clockwise on-screen preview.
+      const pdfRotation = (360 - rotation) % 360;
+      const x = baseX + (pdfRotation === 90 ? h : pdfRotation === 180 ? w : 0);
+      const y = baseY + (pdfRotation === 180 ? h : pdfRotation === 270 ? w : 0);
       const pg = output.addPage([width, height]);
-      pg.drawImage(image, { x: (width - w) / 2, y: (height - h) / 2, width: w, height: h });
+      pg.drawImage(image, { x, y, width: w, height: h, rotate: PDFLib.degrees(pdfRotation) });
       return pg;
     }
     const [page] = await output.copyPages(entry.source.doc, [entry.index]);
