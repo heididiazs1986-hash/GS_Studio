@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={},zoom=1,renderVersion=0,samplingColor=false,inlineEditor=null;
+let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={},zoom=1,renderVersion=0,samplingColor=false,inlineEditor=null,pageOrder=[],selectedPages=new Set(),pageOrderHistory=[];
 const sheet=$('sheet'),overlay=$('overlay'),status=s=>{$('status').textContent=s};
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 $('textSettings').style.display='none';
@@ -12,6 +12,127 @@ function applyWhiteoutStyle(item,node){
  node.classList.toggle('has-frame',show);
  node.style.border=show?(Math.max(.5,Number(item.borderWidth)||1.5)*$('pageCanvas').width/Math.max(1,doc.getPage(selectedPage).getWidth()))+'px solid '+(item.borderColor||'#245881'):'none';
 }
+
+function updateBulkToolbar(){
+ const count=selectedPages.size,total=pageOrder.length,chosen=count>0;
+ $('selectedCount').textContent=count+' de '+total+' seleccionada(s)';
+ $('selectAllPages').checked=total>0&&count===total;
+ $('selectAllPages').indeterminate=count>0&&count<total;
+ $('selectAllPages').disabled=!total;
+ $('moveSelectedFirst').disabled=!chosen;
+ $('moveSelectedLast').disabled=!chosen;
+ $('moveSelectedTo').disabled=!chosen;
+ $('deleteSelected').disabled=!chosen;
+ $('clearSelected').disabled=!chosen;
+ $('undoPageOperation').disabled=!pageOrderHistory.length;
+ $('bulkTargetNumber').disabled=!chosen;
+ $('bulkTargetNumber').max=String(Math.max(1,total-count+1));
+ const currentTarget=Number($('bulkTargetNumber').value);
+ if(!Number.isInteger(currentTarget)||currentTarget<1||currentTarget>total-count+1)
+   $('bulkTargetNumber').value='1';
+}
+function renderThumbs(){
+ $('thumbs').replaceChildren();
+ if(window.__gsThumbnailObserver)window.__gsThumbnailObserver.disconnect();
+ const version=viewDoc;
+ const observer='IntersectionObserver' in window ? new IntersectionObserver(entries=>{
+  for(const entry of entries){
+   if(!entry.isIntersecting)continue;
+   const btn=entry.target;observer.unobserve(btn);
+   (async()=>{
+    const i=Number(btn.dataset.index),p=await version.getPage(i+1),vp=p.getViewport({scale:.16});
+    const c=document.createElement('canvas');
+    c.width=Math.max(1,Math.ceil(vp.width));c.height=Math.max(1,Math.ceil(vp.height));
+    await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+    if(version===viewDoc&&btn.isConnected)btn.prepend(c);
+   })().catch(err=>console.warn('Miniatura no disponible',err));
+  }
+ },{root:$('thumbs').parentElement,rootMargin:'140px'}):null;
+ window.__gsThumbnailObserver=observer;
+ pageOrder.forEach((originalIndex,position)=>{
+  const wrap=document.createElement('div');wrap.className='thumb-row';
+  const checkbox=document.createElement('input');
+  checkbox.type='checkbox';checkbox.className='page-checkbox';
+  checkbox.checked=selectedPages.has(originalIndex);
+  checkbox.setAttribute('aria-label','Seleccionar página '+(position+1));
+  checkbox.onchange=()=>{
+    if(checkbox.checked)selectedPages.add(originalIndex);else selectedPages.delete(originalIndex);
+    wrap.classList.toggle('marked',checkbox.checked);updateBulkToolbar();
+  };
+  wrap.classList.toggle('marked',checkbox.checked);
+  const btn=document.createElement('button');
+  btn.type='button';btn.className='thumb';
+  btn.dataset.index=String(originalIndex);
+  btn.title='Abrir página '+(position+1);
+  btn.classList.toggle('active',originalIndex===selectedPage);
+  const caption=document.createElement('span');
+  caption.textContent='Página '+(position+1)+(position!==originalIndex?' · original '+(originalIndex+1):'');
+  btn.append(caption);
+  btn.onclick=()=>showPage(originalIndex);
+  wrap.append(checkbox,btn);$('thumbs').append(wrap);
+  if(observer)observer.observe(btn);
+  else if(position<9){
+    (async()=>{
+      try{
+       const p=await version.getPage(originalIndex+1),vp=p.getViewport({scale:.16});
+       const c=document.createElement('canvas');
+       c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);
+       await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+       if(version===viewDoc&&btn.isConnected)btn.prepend(c);
+      }catch(e){console.warn('Miniatura no disponible',e)}
+    })();
+  }
+ });
+ updateBulkToolbar();
+}
+function rememberPageOperation(){
+ pageOrderHistory.push([...pageOrder]);
+ if(pageOrderHistory.length>25)pageOrderHistory.shift();
+}
+function moveSelectedTo(position){
+ if(!selectedPages.size)return;
+ const block=pageOrder.filter(index=>selectedPages.has(index));
+ const others=pageOrder.filter(index=>!selectedPages.has(index));
+ const destination=Math.max(0,Math.min(others.length,position));
+ const updated=[...others.slice(0,destination),...block,...others.slice(destination)];
+ if(updated.every((value,i)=>pageOrder[i]===value))return;
+ rememberPageOperation();pageOrder=updated;renderThumbs();
+ status(block.length+' página(s) trasladadas a partir de la posición '+(destination+1)+'.');
+}
+$('selectAllPages').onchange=e=>{
+ selectedPages=e.target.checked?new Set(pageOrder):new Set();
+ renderThumbs();
+};
+$('clearSelected').onclick=()=>{selectedPages.clear();renderThumbs()};
+$('moveSelectedFirst').onclick=()=>moveSelectedTo(0);
+$('moveSelectedLast').onclick=()=>moveSelectedTo(pageOrder.length-selectedPages.size);
+$('moveSelectedTo').onclick=()=>{
+ const value=Number($('bulkTargetNumber').value),maximum=pageOrder.length-selectedPages.size+1;
+ if(!Number.isInteger(value)||value<1||value>maximum){
+  status('La posición debe estar entre 1 y '+maximum+'.');return;
+ }
+ moveSelectedTo(value-1);
+};
+$('deleteSelected').onclick=()=>{
+ if(!selectedPages.size)return;
+ if(selectedPages.size>=pageOrder.length){status('Debe quedar al menos una página en el PDF.');return}
+ if(!confirm('¿Eliminar '+selectedPages.size+' página(s) de la copia que vas a generar? El archivo original no se modificará.'))return;
+ const oldPosition=pageOrder.indexOf(selectedPage);
+ rememberPageOperation();
+ pageOrder=pageOrder.filter(index=>!selectedPages.has(index));
+ const deleted=selectedPages.size;selectedPages.clear();
+ renderThumbs();
+ if(!pageOrder.includes(selectedPage))showPage(pageOrder[Math.max(0,Math.min(oldPosition,pageOrder.length-1))]);
+ else showPage(selectedPage);
+ status(deleted+' página(s) eliminadas de la copia. Puedes deshacer esta operación.');
+};
+$('undoPageOperation').onclick=()=>{
+ if(!pageOrderHistory.length)return;
+ pageOrder=pageOrderHistory.pop();
+ selectedPages.clear();renderThumbs();
+ showPage(pageOrder.includes(selectedPage)?selectedPage:pageOrder[0]);
+ status('Se recuperó el orden y las páginas de la operación anterior.');
+};
 function deskewScale(w,h,angle){
  const a=Math.abs(Number(angle)||0)*Math.PI/180;
  return Math.min(w/(Math.abs(w*Math.cos(a))+Math.abs(h*Math.sin(a))),h/(Math.abs(h*Math.cos(a))+Math.abs(w*Math.sin(a))));
@@ -67,31 +188,14 @@ async function loadFile(file){
   doc=await PDFLib.PDFDocument.load(original.slice());
   viewDoc=await pdfjsLib.getDocument({data:original.slice()}).promise;
   items=[];selected=null;selectedPage=0;deskew={};zoom=1;
-  $('thumbs').replaceChildren();
-  // Build page buttons immediately. Render preview only once a thumbnail approaches view.
-  if(window.__gsThumbnailObserver)window.__gsThumbnailObserver.disconnect();
-  const observer=new IntersectionObserver(entries=>{
-   for(const entry of entries){
-    if(!entry.isIntersecting)continue;
-    const btn=entry.target;observer.unobserve(btn);
-    (async()=>{
-     const i=Number(btn.dataset.index),p=await viewDoc.getPage(i+1),vp=p.getViewport({scale:.16});
-     const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);
-     await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
-     if(btn.isConnected)btn.prepend(c);
-    })().catch(err=>console.warn('Miniatura no disponible',err));
-   }
-  },{root:$('thumbs').parentElement,rootMargin:'140px'});
-  window.__gsThumbnailObserver=observer;
-  for(let i=0;i<viewDoc.numPages;i++){
-   const btn=document.createElement('button');btn.className='thumb';btn.dataset.index=i;
-   const caption=document.createElement('span');caption.textContent='Página '+(i+1);btn.append(caption);
-   btn.onclick=()=>showPage(i);$('thumbs').append(btn);observer.observe(btn);
-  }
-  await showPage(0);$('save').disabled=false;status(viewDoc.numPages+' página(s). Selecciona una herramienta.');
+  pageOrder=Array.from({length:viewDoc.numPages},(_,i)=>i);
+  selectedPages=new Set();pageOrderHistory=[];
+  renderThumbs();
+  await showPage(pageOrder[0]);$('save').disabled=false;status(viewDoc.numPages+' página(s). Puedes editar y seleccionar varias páginas para organizarlas.');
  }catch(e){status('No se pudo abrir el PDF: '+e.message)}
 }
 async function showPage(index){
+ if(!doc||!pageOrder.includes(index))return;
  const version=++renderVersion;
  if(inlineEditor)finishInlineText();
  const previousPage=selectedPage;
@@ -122,7 +226,7 @@ async function showPage(index){
   canvas.style.width=canvas.width+'px';canvas.style.height=canvas.height+'px';
   updateDeskewPreview();
   $('zoomValue').textContent=Math.round(zoom*100)+'%';
-  [...$('thumbs').children].forEach((n,i)=>n.classList.toggle('active',i===index));
+  $('thumbs').querySelectorAll('.thumb').forEach(btn=>btn.classList.toggle('active',Number(btn.dataset.index)===index));
   renderItems();
   // Keep the same document area near the center while zooming.
   if(index===previousPage){
