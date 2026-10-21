@@ -221,7 +221,15 @@ function openInlineText(item){
  };
  field.onblur=()=>finishInlineText();
  inlineEditor={field,item,before:item.text||''};
- overlay.append(field);field.focus();field.select();
+ overlay.append(field);
+ // A text box created during pointerdown can immediately lose focus to that
+ // pointerdown's browser default action. Focus on the next animation frame.
+ const activeField=field;
+ requestAnimationFrame(()=>{
+   if(inlineEditor?.field!==activeField || !activeField.isConnected)return;
+   activeField.focus({preventScroll:true});
+   activeField.select();
+ });
  status('Escribe directamente en la página. Haz clic fuera para dejar el texto colocado.');
 }
 function xy(e){const r=overlay.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))}}
@@ -395,7 +403,13 @@ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
 });
 overlay.addEventListener('pointerdown',e=>{
  if(!doc)return;
- if(inlineEditor){finishInlineText();return;}
+ if(inlineEditor){
+   // A click outside the active text area commits the text. Never create a
+   // second field from the same pointer gesture.
+   e.preventDefault();
+   finishInlineText();
+   return;
+ }
  const p=xy(e);
  if(samplingColor){
   const c=$('pageCanvas'),rgba=c.getContext('2d').getImageData(Math.min(c.width-1,Math.floor(p.x*c.width)),Math.min(c.height-1,Math.floor(p.y*c.height)),1,1).data;
@@ -420,6 +434,8 @@ overlay.addEventListener('pointerdown',e=>{
   return;
  }
  if(mode==='text'){
+  // Do not let the initial pointer press steal focus from the text area.
+  e.preventDefault();
   const page=doc.getPage(selectedPage);
   const item={page:selectedPage,kind:'text',x:Math.min(p.x,.58),y:Math.min(p.y,.92),w:.42,h:.06,text:$('textValue').value,size:Number($('fontSize').value)||16,baseWidth:page.getWidth()};
   add(item);openInlineText(item);
