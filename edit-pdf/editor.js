@@ -406,7 +406,8 @@ $('save').onclick=async()=>{
   // Preserve all untouched pages as PDF. Rasterize only pages explicitly deskewed.
   const result=await PDFLib.PDFDocument.create();
   const originalPdf=await PDFLib.PDFDocument.load(original.slice());
-  for(let i=0;i<originalPdf.getPageCount();i++){
+  const outputIndexBySource=new Map(pageOrder.map((sourceIndex,outputIndex)=>[sourceIndex,outputIndex]));
+  for(const i of pageOrder){
     const angle=Number(deskew[i]||0);
     if(Math.abs(angle)<.001){
       const [copied]=await result.copyPages(originalPdf,[i]);result.addPage(copied);
@@ -435,7 +436,9 @@ $('save').onclick=async()=>{
   // The preview uses PDF.js viewport coordinates; convert back to the PDF
   // user-space coordinates when exporting (honors crop boxes and /Rotate).
   const boundsFor=async item=>{
-    const page=result.getPage(item.page);
+    const target=outputIndexBySource.get(item.page);
+    if(target===undefined)return null;
+    const page=result.getPage(target);
     if(Math.abs(Number(deskew[item.page]||0))>.001){
       const {width,height}=page.getSize();
       return {x:item.x*width,y:(1-item.y-item.h)*height,width:item.w*width,height:item.h*height,
@@ -456,7 +459,10 @@ $('save').onclick=async()=>{
       height:Math.max(...ys)-Math.min(...ys),textPoint,rotation:(360-(vp.rotation%360))%360};
   };
   for(const item of items){
-   const page=result.getPage(item.page),geom=await boundsFor(item);
+   const target=outputIndexBySource.get(item.page);
+   if(target===undefined)continue;
+   const page=result.getPage(target),geom=await boundsFor(item);
+   if(!geom)continue;
    if(item.kind==='whiteout'){
      const opts={x:geom.x,y:geom.y,width:geom.width,height:geom.height,
        color:pdfColor(item.color||'#ffffff'),borderWidth:0};
@@ -475,6 +481,7 @@ $('save').onclick=async()=>{
   setTimeout(()=>URL.revokeObjectURL(url),30000);
   // Clear all document data held by this editor once the download has started.
   original=null;doc=null;items=[];selected=null;gesture=null;deskew={};samplingColor=false;
+  pageOrder=[];selectedPages.clear();pageOrderHistory=[];updateBulkToolbar();
   if(window.__gsThumbnailObserver){window.__gsThumbnailObserver.disconnect();window.__gsThumbnailObserver=null;}
   if(viewDoc){viewDoc.destroy().catch(()=>{});viewDoc=null;}
   $('file').value='';$('thumbs').replaceChildren();
@@ -483,6 +490,6 @@ $('save').onclick=async()=>{
   $('deskewAngle').disabled=true;$('deskewReset').disabled=true;
   $('zoomValue').textContent='100%';
   status('Descarga iniciada. El documento se ha retirado del editor; ya puedes abrir otro.');
- }catch(e){status('Error: '+e.message)}finally{$('save').disabled=false}
+ }catch(e){status('Error: '+e.message)}finally{$('save').disabled=!doc}
 };
 })();
