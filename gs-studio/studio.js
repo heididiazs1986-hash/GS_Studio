@@ -41,6 +41,12 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
   function clear() {
+    // Release PDF.js preview documents in addition to imported page references.
+    const sources=new Set(pages.filter(p=>p.source?.previewPdfPromise).map(p=>p.source));
+    for(const source of sources){
+      source.previewPdfPromise.then(pdf=>pdf.destroy()).catch(()=>{});
+      source.previewPdfPromise=null;
+    }
     pages = [];
     for(const [id,value] of Object.entries(imageOptionDefaults))$(id).value=value;
     $('fileInput').value = '';
@@ -263,23 +269,49 @@
       canvas.replaceWith(fallback);
       return;
     }
-    (async () => {
-      // PDF.js needs its own copy; PDF-lib keeps the original for copyPages().
-      const pdf = await pdfjsLib.getDocument({ data: entry.source.bytes.slice() }).promise;
-      try {
-        const page = await pdf.getPage(entry.index + 1);
-        const original = page.getViewport({ scale: 1 });
-        const scale = Math.min(160 / original.width, 180 / original.height, 1);
-        const viewport = page.getViewport({ scale });
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-      } finally { await pdf.destroy(); }
-    })().catch(() => {
-      const span = document.createElement('span'); span.className = 'note';
-      span.textContent = 'Miniatura no disponible.';
-      if (canvas.isConnected) canvas.replaceWith(span);
+    // Render the original PDF page only once. Subsequent left/right turns use
+    // the cached bitmap and never reopen a complete PDF per thumbnail.
+    const token = String(Number(canvas.dataset.renderToken || 0) + 1);
+    canvas.dataset.renderToken = token;
+    if(!entry.previewPromise){
+      entry.previewPromise = (async()=>{
+        const source = entry.source;
+        if(!source.previewPdfPromise)
+          source.previewPdfPromise = pdfjsLib.getDocument({data:source.bytes.slice()}).promise;
+        const pdf=await source.previewPdfPromise;
+        const page=await pdf.getPage(entry.index+1);
+        const base=page.getViewport({scale:1});
+        const scale=Math.min(160/base.width,180/base.height,1);
+        const viewport=page.getViewport({scale});
+        const thumbnail=document.createElement('canvas');
+        thumbnail.width=Math.max(1,Math.ceil(viewport.width));
+        thumbnail.height=Math.max(1,Math.ceil(viewport.height));
+        await page.render({canvasContext:thumbnail.getContext('2d'),viewport}).promise;
+        return thumbnail;
+      })();
+    }
+    entry.previewPromise.then(original=>{
+      if(!canvas.isConnected||canvas.dataset.renderToken!==token)return;
+      const rotation=((entry.rotation||0)%360+360)%360;
+      const quarterTurn=rotation===90||rotation===270;
+      const rotW=quarterTurn?original.height:original.width;
+      const rotH=quarterTurn?original.width:original.height;
+      const scale=Math.min(160/rotW,180/rotH,1);
+      canvas.width=Math.max(1,Math.round(rotW*scale));
+      canvas.height=Math.max(1,Math.round(rotH*scale));
+      const ctx=canvas.getContext('2d');
+      ctx.translate(canvas.width/2,canvas.height/2);
+      ctx.rotate(rotation*Math.PI/180);
+      ctx.drawImage(original,-original.width*scale/2,-original.height*scale/2,
+        original.width*scale,original.height*scale);
+    }).catch(error=>{
+      console.warn('No fue posible mostrar la página PDF:',error);
+      if(!canvas.isConnected||canvas.dataset.renderToken!==token)return;
+      const span=document.createElement('span');span.className='note';
+      span.textContent='Miniatura no disponible.';
+      canvas.replaceWith(span);
     });
+
   }
   let drag = null;
   // Repaint only visible image thumbnails when changing layout options.
@@ -367,7 +399,7 @@
       const caption = document.createElement('div');
       caption.textContent = (index + 1) + '. ' + entry.label +
         (entry.type === 'document' ? ' · ' + entry.source.doc.getPageCount() + ' página(s)' :
-        entry.type === 'image' && entry.rotation ? ' · Giro ' + entry.rotation + '°' : '');
+        (entry.type === 'image' || entry.type === 'pdf') && entry.rotation ? ' · Giro ' + entry.rotation + '°' : '');
       card.append(caption);
       const nav = document.createElement('nav');
       const add = (label, title, action, disabled = false) => {
@@ -394,12 +426,25 @@
           reorder(index,target-1);
         });
       }
-      if (entry.type === 'pdf') add('↻', 'Girar 90°', () => { entry.rotation = (entry.rotation + 90) % 360; render(); });
+      if (entry.type === 'pdf' && tool === 'organize') {
+        const rotatePdf = delta => {
+          entry.rotation=(entry.rotation+delta+360)%360;
+          caption.textContent=(index+1)+'. '+entry.label+
+            (entry.rotation?' · Giro '+entry.rotation+'°':'');
+          // Rotate just this page. The order and other thumbnail canvases stay intact.
+          drawPagePreview(entry,canvas);
+          say('Página '+(index+1)+' girada '+(delta===90?'a la derecha':'a la izquierda')+
+            '. El cambio se aplicará al PDF descargado.');
+        };
+        add('↶', 'Girar página 90° a la izquierda', () => rotatePdf(270));
+        add('↷', 'Girar página 90° a la derecha', () => rotatePdf(90));
+      }
       add('×', 'Eliminar de la selección', () => { pages.splice(index, 1); render(); });
-      if(entry.type==='image'){
+      if(entry.type==='image'||(entry.type==='pdf'&&tool==='organize')){
         nav.classList.add('image-card-toolbar');
         const info=document.createElement('div');info.className='page-move-hint';
-        info.textContent='Arrastra para cambiar el orden';card.append(info);
+        info.textContent=entry.type==='pdf'?'Arrastra para ordenar · ↶ ↷ para girar':'Arrastra para cambiar el orden';
+        card.append(info);
         const remove=nav.lastElementChild;if(remove)remove.classList.add('remove-image');
       }
       card.append(nav); host.append(card); drawPagePreview(entry, canvas);
