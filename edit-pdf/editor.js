@@ -386,10 +386,12 @@ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
  if(inlineEditor)finishInlineText();
  mode=b.dataset.mode;gesture=null;selected=null;
  document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));
- $('textSettings').style.display=mode==='text'?'block':'none';
- $('coverSettings').style.display=mode==='whiteout'?'block':'none';
+ refreshSideSettings();
  renderItems();
- status(mode==='whiteout'?'Arrastra para cubrir el área incorrecta. Después, haz clic fuera para soltar la cobertura.':mode==='text'?'Haz clic en el documento para escribir directamente. Haz clic fuera para terminar.':'Selecciona un elemento para moverlo. Haz clic en un espacio vacío para soltarlo.');
+ status(mode==='whiteout'?'Arrastra para cubrir el área. Al seleccionarla podrás elegir fondo, marco, color y grosor.'
+   :mode==='text'?'Toca la hoja y escribe dentro del cuadro. Haz clic fuera para terminar.'
+   :mode==='check'||mode==='cross'?'Toca la hoja donde quieres colocar la marca. Después podrás moverla y cambiar su tamaño.'
+   :'Selecciona un elemento para moverlo. Haz clic en un espacio vacío para soltarlo.');
 });
 overlay.addEventListener('pointerdown',e=>{
  if(!doc)return;
@@ -402,6 +404,19 @@ overlay.addEventListener('pointerdown',e=>{
  }
  if(mode==='select'){
   if(selected){selected=null;gesture=null;renderItems();status('Elemento soltado. Puedes continuar editando.')}
+  return;
+ }
+ if(mode==='check'||mode==='cross'){
+  const pg=doc.getPage(selectedPage),angle=((pg.getRotation().angle||0)%180+180)%180;
+  const visibleWidth=angle===90?pg.getHeight():pg.getWidth();
+  const size=Math.max(8,Math.min(120,Number($('markSize').value)||25));
+  const width=Math.min(.3,size/Math.max(1,visibleWidth));
+  const height=Math.min(.3,width*overlay.clientWidth/Math.max(1,overlay.clientHeight));
+  const item={page:selectedPage,kind:'mark',markType:mode,x:Math.max(0,Math.min(1-width,p.x-width/2)),
+    y:Math.max(0,Math.min(1-height,p.y-height/2)),w:width,h:height,
+    size,color:$('markColor').value,stroke:Math.max(1,Math.min(12,Number($('markStroke').value)||3))};
+  switchToSelect();add(item);
+  status('Marca colocada. Selecciónala para cambiar color o grosor, moverla o redimensionarla.');
   return;
  }
  if(mode==='text'){
@@ -421,9 +436,18 @@ overlay.addEventListener('pointermove',e=>{
    gesture.item.x=Math.max(0,Math.min(1-gesture.item.w,gesture.x+p.x-gesture.at.x));
    gesture.item.y=Math.max(0,Math.min(1-gesture.item.h,gesture.y+p.y-gesture.at.y));
   }
-  if(gesture.kind==='resize'){
-   gesture.item.w=Math.max(.008,Math.min(1-gesture.item.x,gesture.w+p.x-gesture.at.x));
-   gesture.item.h=Math.max(.008,Math.min(1-gesture.item.y,gesture.h+p.y-gesture.at.y));
+  if(gesture.kind==='resize'||gesture.kind==='mark-resize'){
+   if(gesture.kind==='mark-resize'){
+     const factor=Math.max(.3,1+Math.max((p.x-gesture.at.x)/Math.max(.01,gesture.w),
+       (p.y-gesture.at.y)/Math.max(.01,gesture.h)));
+     const upper=Math.min((1-gesture.item.x)/gesture.w,(1-gesture.item.y)/gesture.h,5);
+     const bounded=Math.min(upper,factor);
+     gesture.item.w=gesture.w*bounded;gesture.item.h=gesture.h*bounded;
+     gesture.item.size=Math.max(8,Math.min(120,(gesture.item.size||25)*bounded));
+   }else{
+     gesture.item.w=Math.max(.008,Math.min(1-gesture.item.x,gesture.w+p.x-gesture.at.x));
+     gesture.item.h=Math.max(.008,Math.min(1-gesture.item.y,gesture.h+p.y-gesture.at.y));
+   }
    gesture.node.style.width=(gesture.item.w*100)+'%';gesture.node.style.height=(gesture.item.h*100)+'%';
   }else{
    gesture.node.style.left=(gesture.item.x*100)+'%';gesture.node.style.top=(gesture.item.y*100)+'%';
@@ -437,9 +461,7 @@ overlay.addEventListener('pointerup',e=>{
   const w=Math.abs(p.x-a.x),h=Math.abs(p.y-a.y);
   if(w>.003&&h>.003){
    add({page:selectedPage,kind:'whiteout',x:Math.min(p.x,a.x),y:Math.min(p.y,a.y),w,h,color:$('coverColor').value,frame:$('coverFrame').checked,borderColor:$('coverBorderColor').value,borderWidth:Number($('coverBorderWidth').value)});
-   mode='select';
-   document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='select'));
-   $('coverSettings').style.display='none';renderItems();
+   switchToSelect();renderItems();
    status('Cobertura colocada. Haz clic fuera para soltarla o usa su barra para ajustarla.');
   }
  }
@@ -475,6 +497,17 @@ $('coverColor').oninput=e=>{if(selected?.kind==='whiteout'){selected.color=e.tar
 $('coverFrame').onchange=e=>{showFrameSettings();if(selected?.kind==='whiteout'){selected.frame=e.target.checked;renderItems()}};
 $('coverBorderColor').oninput=e=>{if(selected?.kind==='whiteout'){selected.borderColor=e.target.value;renderItems()}};
 $('coverBorderWidth').onchange=e=>{if(selected?.kind==='whiteout'){selected.borderWidth=Math.max(.5,Math.min(6,Number(e.target.value)||1.5));renderItems()}};
+$('markColor').oninput=e=>{if(selected?.kind==='mark'){selected.color=e.target.value;renderItems()}};
+$('markStroke').onchange=e=>{if(selected?.kind==='mark'){selected.stroke=Math.max(1,Math.min(12,Number(e.target.value)||3));renderItems()}};
+$('markSize').onchange=e=>{
+ if(selected?.kind!=='mark')return;
+ const next=Math.max(8,Math.min(120,Number(e.target.value)||25));
+ const factor=next/Math.max(1,selected.size||25);
+ selected.size=next;selected.w=Math.min(1-selected.x,selected.w*factor);
+ selected.h=Math.min(1-selected.y,selected.h*factor);
+ renderItems();
+};
+refreshSideSettings();
 showFrameSettings();
 async function setZoom(value){if(!doc)return;zoom=Math.max(.5,Math.min(3,value));await showPage(selectedPage)}
 $('zoomIn').onclick=()=>setZoom(zoom+.25);
