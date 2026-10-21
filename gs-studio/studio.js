@@ -87,6 +87,7 @@
     $('signResultBtn').classList.toggle('hidden', next === 'merge' || !(next === 'organize' && pages.length));
     $('imagePdfOptions').classList.toggle('hidden',next!=='images');
     $('imageReorderHint').classList.toggle('hidden',next!=='images');
+    $('organizeRotationTools').classList.toggle('hidden',next!=='organize');
     $('fileInput').multiple = next === 'images' || next === 'merge';
     $('fileInput').accept = next === 'images' ? 'image/png,image/jpeg,.png,.jpg,.jpeg' : '.pdf,.zip,application/pdf,application/zip';
     $('dropFormats').textContent = next === 'images' ? 'Admite JPG y PNG' : 'Admite PDF y ZIP con documentos PDF';
@@ -334,6 +335,20 @@
       refreshImagePreviews();
     });
   }
+  function rotateAllPdf(delta){
+    if(tool!=='organize'||!pages.some(entry=>entry.type==='pdf'))return;
+    let count=0;
+    for(const entry of pages){
+      if(entry.type!=='pdf')continue;
+      entry.rotation=(entry.rotation+delta+360)%360;
+      count++;
+    }
+    render();
+    say(count+' página(s) giradas '+(delta===90?'a la derecha':'a la izquierda')+
+      '. Puedes seguir reorganizando antes de descargar.');
+  }
+  $('rotateAllLeft').addEventListener('click',()=>rotateAllPdf(270));
+  $('rotateAllRight').addEventListener('click',()=>rotateAllPdf(90));
   function reorder(from, to) {
     if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) return;
     const [page] = pages.splice(from, 1);
@@ -468,6 +483,8 @@
       }
     });
     $('exportBtn').disabled = !pages.length;
+    $('rotateAllLeft').disabled = tool!=='organize' || !pages.some(entry=>entry.type==='pdf');
+    $('rotateAllRight').disabled = tool!=='organize' || !pages.some(entry=>entry.type==='pdf');
     $('signResultBtn').classList.toggle('hidden', tool === 'merge' || !(tool === 'organize' && pages.length));
     $('signPage').max = String(pages.length);
     $('rangeEnd').value = String(pages.length || 1);
