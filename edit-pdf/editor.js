@@ -133,6 +133,45 @@ $('undoPageOperation').onclick=()=>{
  showPage(pageOrder.includes(selectedPage)?selectedPage:pageOrder[0]);
  status('Se recuperó el orden y las páginas de la operación anterior.');
 };
+function switchToSelect(){
+ mode='select';
+ document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='select'));
+}
+function refreshSideSettings(){
+ const coverActive=mode==='whiteout'||selected?.kind==='whiteout';
+ const textActive=mode==='text'||selected?.kind==='text';
+ const markActive=mode==='check'||mode==='cross'||selected?.kind==='mark';
+ $('coverSettings').style.display=coverActive?'block':'none';
+ $('textSettings').style.display=textActive?'block':'none';
+ $('markSettings').style.display=markActive?'block':'none';
+ if(selected?.kind==='whiteout'){
+  $('coverColor').value=selected.color||'#ffffff';
+  $('coverFrame').checked=!!selected.frame;
+  $('coverBorderColor').value=selected.borderColor||'#245881';
+  $('coverBorderWidth').value=String(selected.borderWidth||1.5);
+  showFrameSettings();
+ }
+ if(selected?.kind==='mark'){
+  $('markColor').value=selected.color||'#245881';
+  $('markStroke').value=String(selected.stroke||3);
+  $('markSize').value=String(selected.size||25);
+ }
+}
+const svgNamespace='http://www.w3.org/2000/svg';
+function makeMarkSvg(item){
+ const svg=document.createElementNS(svgNamespace,'svg');
+ svg.setAttribute('viewBox','0 0 100 100');
+ svg.setAttribute('aria-label',item.markType==='check'?'Marca de verificación':'Marca de cruz');
+ svg.setAttribute('role','img');
+ const path=document.createElementNS(svgNamespace,'path');
+ path.setAttribute('d',item.markType==='check'?'M 13 53 L 41 79 L 89 19':'M 18 18 L 82 82 M 82 18 L 18 82');
+ path.setAttribute('fill','none');
+ path.setAttribute('stroke',item.color||'#245881');
+ path.setAttribute('stroke-width',String(Math.max(3,Math.min(24,(Number(item.stroke)||3)/(Number(item.size)||25)*100))));
+ path.setAttribute('stroke-linecap','round');
+ path.setAttribute('stroke-linejoin','round');
+ svg.append(path);return svg;
+}
 function deskewScale(w,h,angle){
  const a=Math.abs(Number(angle)||0)*Math.PI/180;
  return Math.min(w/(Math.abs(w*Math.cos(a))+Math.abs(h*Math.sin(a))),h/(Math.abs(h*Math.cos(a))+Math.abs(w*Math.sin(a))));
@@ -146,12 +185,16 @@ function add(item){items.push(item);selected=item;renderItems();$('save').disabl
 function finishInlineText(cancel=false){
  if(!inlineEditor)return;
  const {field,item,before}=inlineEditor;inlineEditor=null;
+ const dimensions=field.getBoundingClientRect();
+ const area=overlay.getBoundingClientRect();
+ if(!cancel){
+  item.w=Math.max(.05,Math.min(1-item.x,dimensions.width/Math.max(1,area.width)));
+  item.h=Math.max(.025,Math.min(1-item.y,dimensions.height/Math.max(1,area.height)));
+ }
  item.text=cancel?before:field.value;
  field.remove();
  if(!String(item.text||'').trim())items=items.filter(x=>x!==item);
- selected=null;mode='select';
- document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='select'));
- $('textSettings').style.display='none';$('coverSettings').style.display='none';
+ selected=null;switchToSelect();
  renderItems();
  status('Texto colocado. Puedes seleccionarlo, moverlo o volver a editarlo.');
 }
@@ -164,6 +207,7 @@ function openInlineText(item){
  field.style.left=(item.x*100)+'%';field.style.top=(item.y*100)+'%';
  field.style.width=(item.w*100)+'%';field.style.height=Math.max(42,item.h*area.height)+'px';
  field.style.fontSize=Math.max(12,item.size*area.width/item.baseWidth)+'px';
+ field.style.lineHeight='1.25';
  field.onpointerdown=e=>e.stopPropagation();
  field.oninput=()=>{
   item.text=field.value;
