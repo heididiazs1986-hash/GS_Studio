@@ -96,7 +96,7 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 <body>
 <header><a href="../gs-studio/">← GS Studio</a><div><div class="eyebrow">Centro de gestión documental - Gestión Social</div><strong>Editar PDF</strong></div></header>
 <main>
-<section class="panel top-row"><div><div class="eyebrow">Editor documental</div><h1>Corrige tus documentos con precisión</h1><p class="hint">Añade texto, cubre zonas y endereza escaneos sin modificar el original.</p></div><div><label class="hint" for="file">Abrir documento PDF</label><div><input id="file" type="file" accept=".pdf,application/pdf"></div></div></section>
+<section class="panel top-row"><div><div class="eyebrow">Editor documental</div><h1>Corrige tus documentos con precisión</h1><p class="hint">Escribe directamente en el PDF, agrega casillas ✓ o ✕, cubre zonas y organiza páginas sin alterar el original.</p></div><div><label class="hint" for="file">Abrir documento PDF</label><div><input id="file" type="file" accept=".pdf,application/pdf"></div></div></section>
 <section id="bulkToolbar" class="panel bulk-panel" aria-label="Organización de páginas">
 <div class="bulk-heading"><div><strong>Organizar páginas del documento</strong><p>Selecciona varias páginas desde sus casillas y muévelas juntas o elimínalas.</p></div><div class="bulk-count" id="selectedCount" role="status">0 seleccionadas</div></div>
 <div class="bulk-actions">
@@ -126,8 +126,8 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 </div>
 <div class="settings" id="coverSettings"><h3>Cubrir zona · fondo y marco</h3><div class="field"><label for="coverColor">Color de la hoja</label><input type="color" id="coverColor" value="#ffffff"></div><button id="sampleCover" type="button">Tomar color del documento</button><div class="frame-options"><label for="coverFrame"><input type="checkbox" id="coverFrame"> Agregar marco visible al PDF</label></div><div class="field" id="coverFrameOptions" hidden><label for="coverBorderColor">Color del marco</label><input type="color" id="coverBorderColor" value="#245881"><label for="coverBorderWidth">Grosor del marco (pt)</label><input type="number" id="coverBorderWidth" min="0.5" max="6" step="0.5" value="1.5"></div><p class="help-text">Sin marco es el valor predeterminado. Puedes elegir el color del fondo, activar un borde y ajustar su color y grosor. El contorno de selección nunca se exporta.</p></div>
 <div class="settings" id="textSettings"><h3>Configurar texto</h3>
-<p class="help-text">Pulsa sobre la página y escribe directamente. Toca fuera del texto para dejarlo colocado.</p>
-<div class="field"><label for="textValue">Texto inicial (opcional)</label><input id="textValue" value="" placeholder="Escribir sobre el PDF"></div>
+<p class="help-text">Toca la página para abrir un cuadro de escritura. Escribe varias líneas y toca fuera para colocarlas; puedes volver a editar el texto.</p>
+<input id="textValue" type="hidden" value="">
 <div class="field"><label for="fontSize">Tamaño de letra</label><input id="fontSize" type="number" value="16" min="6" max="72"></div></div>
 <div class="settings" id="markSettings"><h3>Configurar marca</h3>
 <p class="help-text">Toca el documento para colocar ✓ o ✕. Después puedes mover y redimensionar la marca.</p>
