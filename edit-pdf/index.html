@@ -52,13 +52,64 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 .edit-inline-text{position:absolute;z-index:70;resize:both;overflow:auto;min-width:100px;min-height:38px;max-width:98%;max-height:80%;padding:3px 5px;border:2px solid #ff6900;border-radius:4px;outline:0;color:#192a3c;background:#ffffffd9;font-family:Helvetica,Arial,sans-serif;line-height:1.2;touch-action:manipulation}
 .edit-item.text{cursor:move}.edit-item.text.selected{outline:2px dashed #245881;overflow:visible}.text-toolbar{z-index:80}
 .frame-options{display:flex;align-items:center;margin:10px 0}.frame-options label{display:flex;gap:9px;align-items:center;font-size:12px;font-weight:700;cursor:pointer}.frame-options input[type=checkbox]{width:17px;height:17px;accent-color:#ff6900}.field[hidden]{display:none!important}.whiteout-toolbar .frame-toggle{font-weight:700}.edit-item.whiteout.has-frame{border-style:solid;border-radius:0;box-sizing:border-box}.edit-item.whiteout.selected{outline:2px dashed #245881!important;outline-offset:3px}.edit-item.whiteout:not(.selected){outline:none!important}
+
+.bulk-panel{padding:13px 19px;margin-bottom:12px}
+.bulk-heading{display:flex;align-items:start;gap:15px;justify-content:space-between}
+.bulk-heading strong{font-size:14px;color:#245881}
+.bulk-heading p{font-size:12px;color:#63778c;margin:5px 0 11px}
+.bulk-count{font-size:12px;font-weight:750;color:#245881;background:#eaf3fb;border-radius:9px;padding:8px;white-space:nowrap}
+.bulk-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.bulk-actions button{min-height:37px;font-size:12px}
+.bulk-actions button.danger{color:#a02c27;border-color:#edc4c0}
+.bulk-actions button.danger:not(:disabled):hover{background:#fff0ed}
+.bulk-all,.bulk-target{display:flex;align-items:center;gap:7px;font-size:12px;color:#244a6f;min-height:39px;border:1px solid #d7e0ec;border-radius:9px;padding:6px 9px}
+.bulk-all input{height:17px;width:17px;accent-color:#ff6900}
+.bulk-target input{width:60px!important;min-height:27px;padding:4px!important}
+.thumb-row{display:flex;align-items:start;gap:6px;margin-bottom:8px;padding:5px;border:1px solid #d6e1ed;border-radius:11px;background:#fff}
+.thumb-row.marked{background:#fff6ef;border-color:#ff9a50}
+.thumb-row .page-checkbox{height:19px;width:19px;accent-color:#ff6900;flex-shrink:0;margin:11px 1px;cursor:pointer}
+.thumb-row .thumb{margin-bottom:0;min-width:0;flex:1;padding:6px;border-color:transparent}
+.thumb-row .thumb.active{border:2px solid #245881}
+#markSettings{display:none}
+.edit-item.mark{overflow:visible;cursor:move;min-width:12px;min-height:12px}
+.edit-item.mark svg{display:block;width:100%;height:100%;overflow:visible;pointer-events:none}
+.edit-item.mark.selected{outline:1.5px dashed #245881;outline-offset:4px}
+.mark-resize-handle{position:absolute;right:-11px;bottom:-11px;width:20px;height:20px;background:#fff;border:2px solid #245881;border-radius:5px;touch-action:none;cursor:nwse-resize}
+.edit-item.whiteout.selected{outline:1.5px dashed #245881!important;outline-offset:4px}
+.whiteout-toolbar{max-width:min(550px,85vw);flex-wrap:wrap;gap:7px;padding:7px}
+.whiteout-toolbar .cover-inline-label{font-size:11px;color:#395a7a;display:flex;align-items:center;gap:5px;font-weight:700}
+.whiteout-toolbar .cover-inline-width{width:62px;min-height:30px;border:1px solid #c7d4e3;border-radius:6px;padding:4px;font-size:12px}
+.whiteout-toolbar input[type=color]{height:32px;width:37px;flex-shrink:0}
+.whiteout-handle{width:19px;height:19px;border-radius:5px}
+.edit-inline-text{background:#fffefa;line-height:1.35;box-shadow:0 4px 15px #21374c33}
+@media(max-width:650px){
+ .bulk-panel{padding:12px}
+ .bulk-heading{flex-wrap:wrap;gap:5px}
+ .bulk-actions{gap:6px}
+ .bulk-actions button{flex:1}
+ .thumb-row{min-width:121px;max-width:121px}
+ .thumb-row .thumb{min-width:0;width:auto}
+ .thumb-row .page-checkbox{margin-top:7px}
+ .sidebar-pages #thumbs{align-items:stretch}
+}
 </style><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/gs-studio/icons/pwa-192.png"><script defer src="/pwa-register.js"></script></head>
 <body>
 <header><a href="../gs-studio/">← GS Studio</a><div><div class="eyebrow">Centro de gestión documental - Gestión Social</div><strong>Editar PDF</strong></div></header>
 <main>
 <section class="panel top-row"><div><div class="eyebrow">Editor documental</div><h1>Corrige tus documentos con precisión</h1><p class="hint">Añade texto, cubre zonas y endereza escaneos sin modificar el original.</p></div><div><label class="hint" for="file">Abrir documento PDF</label><div><input id="file" type="file" accept=".pdf,application/pdf"></div></div></section>
+<section id="bulkToolbar" class="panel bulk-panel" aria-label="Organización de páginas">
+<div class="bulk-heading"><div><strong>Organizar páginas del documento</strong><p>Selecciona varias páginas desde sus casillas y muévelas juntas o elimínalas.</p></div><div class="bulk-count" id="selectedCount" role="status">0 seleccionadas</div></div>
+<div class="bulk-actions">
+<label class="bulk-all"><input type="checkbox" id="selectAllPages"> Seleccionar todas</label>
+<button id="moveSelectedFirst" type="button" disabled>↑ Al inicio</button>
+<button id="moveSelectedLast" type="button" disabled>↓ Al final</button>
+<label class="bulk-target" for="bulkTargetNumber">Mover a posición <input id="bulkTargetNumber" type="number" min="1" value="1"></label>
+<button id="moveSelectedTo" type="button" disabled>Mover seleccionadas</button>
+<button id="deleteSelected" class="danger" type="button" disabled>Eliminar seleccionadas</button>
+<button id="clearSelected" type="button" disabled>Quitar selección</button>
+</div></section>
 <div class="editor-layout">
-<aside class="panel sidebar sidebar-pages"><h2>PÁGINAS DEL DOCUMENTO</h2><div id="thumbs" aria-label="Páginas"></div></aside>
+<aside class="panel sidebar sidebar-pages"><h2>PÁGINAS DEL DOCUMENTO</h2><p class="hint">Marca las casillas para mover o eliminar varias páginas a la vez.</p><div id="thumbs" aria-label="Páginas"></div></aside>
 <section class="panel viewer-panel">
 <div class="viewer-head"><strong>Vista del documento</strong><div class="zoom-controls"><button id="zoomOut" title="Reducir zoom" type="button">−</button><output id="zoomValue">100%</output><button id="zoomIn" title="Ampliar zoom" type="button">+</button><button id="fitWidth" type="button">Ajustar al ancho</button></div></div>
 <div class="viewer"><div class="sheet" id="sheet"><canvas id="pageCanvas"></canvas><div id="overlay" class="overlay"></div></div></div>
@@ -69,12 +120,20 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 <button data-mode="select" class="active"><span class="tool-icon">↔</span> Seleccionar / mover</button>
 <button data-mode="whiteout"><span class="tool-icon">▧</span> Cubrir zona</button>
 <button data-mode="text"><span class="tool-icon">T</span> Agregar texto</button>
+<button data-mode="check"><span class="tool-icon">✓</span> Marca de verificación</button>
+<button data-mode="cross"><span class="tool-icon">✕</span> Marca de cruz</button>
 </div>
-<div class="settings" id="coverSettings"><h3>Color de cobertura</h3><div class="field"><label for="coverColor">Color de la hoja</label><input type="color" id="coverColor" value="#ffffff"></div><button id="sampleCover" type="button">Tomar color del documento</button><div class="frame-options"><label for="coverFrame"><input type="checkbox" id="coverFrame"> Mostrar marco en el PDF</label></div><div class="field" id="coverFrameOptions" hidden><label for="coverBorderColor">Color del marco</label><input type="color" id="coverBorderColor" value="#245881"><label for="coverBorderWidth">Grosor del marco (pt)</label><input type="number" id="coverBorderWidth" min="0.5" max="6" step="0.5" value="1.5"></div><p class="help-text">Toca una zona limpia de la hoja para copiar su color. Sin marco es la opción predeterminada. El borde de selección no se exporta.</p></div>
+<div class="settings" id="coverSettings"><h3>Cubrir zona · fondo y marco</h3><div class="field"><label for="coverColor">Color de la hoja</label><input type="color" id="coverColor" value="#ffffff"></div><button id="sampleCover" type="button">Tomar color del documento</button><div class="frame-options"><label for="coverFrame"><input type="checkbox" id="coverFrame"> Agregar marco visible al PDF</label></div><div class="field" id="coverFrameOptions" hidden><label for="coverBorderColor">Color del marco</label><input type="color" id="coverBorderColor" value="#245881"><label for="coverBorderWidth">Grosor del marco (pt)</label><input type="number" id="coverBorderWidth" min="0.5" max="6" step="0.5" value="1.5"></div><p class="help-text">Sin marco es el valor predeterminado. Puedes elegir el color del fondo, activar un borde y ajustar su color y grosor. El contorno de selección nunca se exporta.</p></div>
 <div class="settings" id="textSettings"><h3>Configurar texto</h3>
 <p class="help-text">Pulsa sobre la página y escribe directamente. Toca fuera del texto para dejarlo colocado.</p>
 <div class="field"><label for="textValue">Texto inicial (opcional)</label><input id="textValue" value="" placeholder="Escribir sobre el PDF"></div>
 <div class="field"><label for="fontSize">Tamaño de letra</label><input id="fontSize" type="number" value="16" min="6" max="72"></div></div>
+<div class="settings" id="markSettings"><h3>Configurar marca</h3>
+<p class="help-text">Toca el documento para colocar ✓ o ✕. Después puedes mover y redimensionar la marca.</p>
+<div class="field"><label for="markColor">Color de la marca</label><input type="color" id="markColor" value="#245881"></div>
+<div class="field"><label for="markSize">Tamaño (pt)</label><input type="number" id="markSize" min="8" max="120" value="25"></div>
+<div class="field"><label for="markStroke">Grosor del trazo (pt)</label><input type="number" id="markStroke" min="1" max="12" step="0.5" value="3"></div>
+</div>
 <div class="settings"><h3>Enderezar escaneo</h3>
 <div class="field"><div class="field-row"><label for="deskewAngle">Inclinación</label><output id="deskewValue">0°</output></div><input id="deskewAngle" type="range" min="-8" max="8" step="0.25" value="0" disabled></div>
 <button id="deskewReset" disabled>Restablecer inclinación</button>
