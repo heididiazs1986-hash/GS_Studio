@@ -283,62 +283,101 @@ async function showPage(index){
 }
 function renderItems(){
  overlay.replaceChildren();
+ refreshSideSettings();
  for(const item of current()){
-  const node=document.createElement('div');node.className='edit-item '+item.kind+(item===selected?' selected':'');
-  node.style.left=(item.x*100)+'%';node.style.top=(item.y*100)+'%';
-  node.style.width=(item.w*100)+'%';node.style.height=(item.h*100)+'%';
+  const node=document.createElement('div');
+  node.className='edit-item '+item.kind+(item===selected?' selected':'');
+  node.style.left=item.x*100+'%';node.style.top=item.y*100+'%';
+  node.style.width=item.w*100+'%';node.style.height=item.h*100+'%';
+  node.dataset.itemId=String(items.indexOf(item));
   if(item.kind==='whiteout')applyWhiteoutStyle(item,node);
-  // While placing text, the white coverage must not intercept clicks on the page.
   if(item.kind==='whiteout' && mode!=='select')node.style.pointerEvents='none';
   if(item.kind==='text'){
-    node.textContent=item.text;node.style.color='#182433';node.style.lineHeight='1.2';
-    node.style.fontSize=Math.max(7,item.size*overlay.getBoundingClientRect().width/item.baseWidth)+'px';
-    node.style.lineHeight='1.25';
+   node.textContent=item.text;node.style.color='#182433';
+   node.style.fontSize=Math.max(7,item.size*overlay.getBoundingClientRect().width/item.baseWidth)+'px';
+   node.style.lineHeight='1.25';
   }
+  if(item.kind==='mark')node.append(makeMarkSvg(item));
   node.onpointerdown=e=>{
-    if(item.kind==='text'&&mode==='text'){e.stopPropagation();openInlineText(item);return;}
-    if(mode!=='select' && item.kind!=='whiteout')return;
-    if(e.target.closest('.whiteout-toolbar,.whiteout-handle'))return;
-    e.stopPropagation();
+    if(item.kind==='text'&&mode==='text'){e.stopPropagation();openInlineText(item);return}
+    if(mode!=='select'&&item.kind!=='whiteout')return;
+    if(e.target.closest('.whiteout-toolbar,.whiteout-handle,.mark-resize-handle'))return;
+    e.stopPropagation();e.preventDefault();
     selected=item;
-    if(item.kind==='whiteout' && mode!=='select'){
-      mode='select';
-      document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='select'));
-      $('coverSettings').style.display='none';$('textSettings').style.display='none';
-    }
+    if(mode!=='select')switchToSelect();
     renderItems();
     const active=[...overlay.querySelectorAll('.edit-item')].find(el=>el.dataset.itemId===String(items.indexOf(item)));
     gesture={item,at:xy(e),x:item.x,y:item.y,node:active,kind:'move'};
     overlay.setPointerCapture(e.pointerId);
   };
-  node.dataset.itemId=String(items.indexOf(item));
   if(item.kind==='text')node.ondblclick=e=>{e.stopPropagation();openInlineText(item)};
   if(item.kind==='text'&&selected===item){
-    const bar=document.createElement('div');bar.className='whiteout-toolbar text-toolbar';
-    const edit=document.createElement('button');edit.type='button';edit.textContent='Editar texto';
-    edit.onclick=e=>{e.stopPropagation();openInlineText(item)};
-    const removeText=document.createElement('button');removeText.type='button';removeText.textContent='Eliminar';
-    removeText.onclick=e=>{e.stopPropagation();items=items.filter(x=>x!==item);selected=null;renderItems()};
-    bar.onpointerdown=e=>e.stopPropagation();bar.append(edit,removeText);node.append(bar);
+   const bar=document.createElement('div');bar.className='whiteout-toolbar text-toolbar';
+   const edit=document.createElement('button');edit.type='button';edit.textContent='Editar texto';
+   edit.onclick=e=>{e.stopPropagation();openInlineText(item)};
+   const del=document.createElement('button');del.type='button';del.textContent='Eliminar';
+   del.onclick=e=>{e.stopPropagation();items=items.filter(x=>x!==item);selected=null;renderItems()};
+   bar.onpointerdown=e=>e.stopPropagation();bar.append(edit,del);node.append(bar);
   }
-  if(item.kind==='whiteout' && selected===item){
-    const toolbar=document.createElement('div');toolbar.className='whiteout-toolbar';
-    const color=document.createElement('input');color.type='color';color.value=item.color||'#ffffff';color.title='Color de la cobertura';color.setAttribute('aria-label','Color de la cobertura');
-    color.oninput=e=>{item.color=e.target.value;node.style.backgroundColor=item.color;$('coverColor').value=item.color};
-    const toggleFrame=document.createElement('button');toggleFrame.type='button';toggleFrame.className='frame-toggle';
-    toggleFrame.textContent=item.frame?'Marco: Sí':'Marco: No';
-    toggleFrame.title='Incluir o quitar el marco en este recuadro y en el PDF final';
-    toggleFrame.onclick=e=>{e.stopPropagation();item.frame=!item.frame;
-      $('coverFrame').checked=item.frame;showFrameSettings();renderItems();
-    };
-    const copy=document.createElement('button');copy.type='button';copy.textContent='Duplicar';copy.onclick=e=>{e.stopPropagation();add({...item,x:Math.min(.9,item.x+.02),y:Math.min(.9,item.y+.02)});};
-    const remove=document.createElement('button');remove.type='button';remove.textContent='Eliminar';remove.onclick=e=>{e.stopPropagation();items=items.filter(x=>x!==item);selected=null;renderItems()};
-    toolbar.append(color,toggleFrame,copy,remove);toolbar.onpointerdown=e=>e.stopPropagation();node.append(toolbar);
-    const handle=document.createElement('span');handle.className='whiteout-handle';handle.title='Arrastra para cambiar tamaño';
-    handle.onpointerdown=e=>{
-      e.stopPropagation();gesture={item,at:xy(e),w:item.w,h:item.h,node,kind:'resize'};
-      overlay.setPointerCapture(e.pointerId);
-    };node.append(handle);
+  if(item.kind==='whiteout'&&selected===item){
+   const toolbar=document.createElement('div');toolbar.className='whiteout-toolbar';
+   if(item.x>.55){toolbar.style.left='auto';toolbar.style.right='0'}
+   toolbar.onpointerdown=e=>e.stopPropagation();
+   const label=(title,control)=>{
+     const wrapper=document.createElement('label');wrapper.className='cover-inline-label';
+     wrapper.append(document.createTextNode(title),control);toolbar.append(wrapper);
+   };
+   const color=document.createElement('input');color.type='color';color.value=item.color||'#ffffff';
+   color.title='Color del fondo';color.setAttribute('aria-label','Color de la cobertura');
+   color.oninput=e=>{item.color=e.target.value;applyWhiteoutStyle(item,node);$('coverColor').value=item.color};
+   label('Fondo',color);
+   const toggleFrame=document.createElement('button');toggleFrame.type='button';toggleFrame.className='frame-toggle';
+   toggleFrame.textContent=item.frame?'☑ Marco':'☐ Marco';
+   toggleFrame.title='Mostrar u ocultar el marco en el PDF';
+   toggleFrame.onclick=e=>{e.stopPropagation();item.frame=!item.frame;renderItems()};
+   toolbar.append(toggleFrame);
+   const borderColor=document.createElement('input');borderColor.type='color';
+   borderColor.value=item.borderColor||'#245881';borderColor.disabled=!item.frame;
+   borderColor.title='Color del marco';borderColor.setAttribute('aria-label','Color del marco');
+   borderColor.oninput=e=>{item.borderColor=e.target.value;applyWhiteoutStyle(item,node);$('coverBorderColor').value=item.borderColor};
+   label('Borde',borderColor);
+   const width=document.createElement('input');width.type='number';width.className='cover-inline-width';
+   width.min='.5';width.max='6';width.step='.5';width.value=String(item.borderWidth||1.5);
+   width.disabled=!item.frame;width.title='Grosor del marco en puntos';
+   width.onchange=e=>{
+     item.borderWidth=Math.max(.5,Math.min(6,Number(e.target.value)||1.5));
+     e.target.value=String(item.borderWidth);$('coverBorderWidth').value=e.target.value;
+     applyWhiteoutStyle(item,node);
+   };
+   label('Grosor',width);
+   const copy=document.createElement('button');copy.type='button';copy.textContent='Duplicar';
+   copy.onclick=e=>{e.stopPropagation();add({...item,x:Math.min(1-item.w,item.x+.02),y:Math.min(1-item.h,item.y+.02)})};
+   const remove=document.createElement('button');remove.type='button';remove.textContent='Eliminar';
+   remove.onclick=e=>{e.stopPropagation();items=items.filter(x=>x!==item);selected=null;renderItems()};
+   toolbar.append(copy,remove);node.append(toolbar);
+   const handle=document.createElement('span');handle.className='whiteout-handle';handle.title='Cambiar tamaño de la cobertura';
+   handle.onpointerdown=e=>{
+     e.stopPropagation();e.preventDefault();
+     gesture={item,at:xy(e),w:item.w,h:item.h,node,kind:'resize'};
+     overlay.setPointerCapture(e.pointerId);
+   };
+   node.append(handle);
+  }
+  if(item.kind==='mark'&&selected===item){
+   const bar=document.createElement('div');bar.className='whiteout-toolbar text-toolbar';
+   bar.onpointerdown=e=>e.stopPropagation();
+   const copy=document.createElement('button');copy.type='button';copy.textContent='Duplicar';
+   copy.onclick=e=>{e.stopPropagation();add({...item,x:Math.min(1-item.w,item.x+.02),y:Math.min(1-item.h,item.y+.02)})};
+   const remove=document.createElement('button');remove.type='button';remove.textContent='Eliminar';
+   remove.onclick=e=>{e.stopPropagation();items=items.filter(x=>x!==item);selected=null;renderItems()};
+   bar.append(copy,remove);node.append(bar);
+   const handle=document.createElement('span');handle.className='mark-resize-handle';handle.title='Arrastra para cambiar tamaño';
+   handle.onpointerdown=e=>{
+     e.stopPropagation();e.preventDefault();
+     gesture={item,at:xy(e),w:item.w,h:item.h,node,kind:'mark-resize'};
+     overlay.setPointerCapture(e.pointerId);
+   };
+   node.append(handle);
   }
   overlay.append(node);
  }
