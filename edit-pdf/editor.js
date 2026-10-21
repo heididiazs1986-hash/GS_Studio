@@ -374,7 +374,7 @@ function renderItems(){
    const handle=document.createElement('span');handle.className='mark-resize-handle';handle.title='Arrastra para cambiar tamaño';
    handle.onpointerdown=e=>{
      e.stopPropagation();e.preventDefault();
-     gesture={item,at:xy(e),w:item.w,h:item.h,node,kind:'mark-resize'};
+     gesture={item,at:xy(e),w:item.w,h:item.h,size:item.size,node,kind:'mark-resize'};
      overlay.setPointerCapture(e.pointerId);
    };
    node.append(handle);
@@ -443,7 +443,7 @@ overlay.addEventListener('pointermove',e=>{
      const upper=Math.min((1-gesture.item.x)/gesture.w,(1-gesture.item.y)/gesture.h,5);
      const bounded=Math.min(upper,factor);
      gesture.item.w=gesture.w*bounded;gesture.item.h=gesture.h*bounded;
-     gesture.item.size=Math.max(8,Math.min(120,(gesture.item.size||25)*bounded));
+     gesture.item.size=Math.max(8,Math.min(120,(gesture.size||25)*bounded));
    }else{
      gesture.item.w=Math.max(.008,Math.min(1-gesture.item.x,gesture.w+p.x-gesture.at.x));
      gesture.item.h=Math.max(.008,Math.min(1-gesture.item.y,gesture.h+p.y-gesture.at.y));
@@ -590,6 +590,26 @@ $('save').onclick=async()=>{
      page.drawText(item.text,{x:geom.textPoint[0],y:geom.textPoint[1],
        size,font,color:PDFLib.rgb(.09,.14,.2),maxWidth:Math.max(size,geom.width),
        rotate:PDFLib.degrees(geom.rotation),lineHeight:size*1.2});
+   }else if(item.kind==='mark'){
+     // Draw ✓ / ✕ as real PDF vector lines. Helvetica cannot encode these symbols.
+     const angle=Number(deskew[item.page]||0);
+     const viewport=Math.abs(angle)<.001?(await viewDoc.getPage(item.page+1)).getViewport({scale:1}):null;
+     const point=(u,v)=>{
+       const xx=item.x+item.w*u,yy=item.y+item.h*v;
+       if(viewport){
+         const [x,y]=viewport.convertToPdfPoint(xx*viewport.width,yy*viewport.height);
+         return{x,y};
+       }
+       const {width,height}=page.getSize();
+       return{x:xx*width,y:(1-yy)*height};
+     };
+     const shape=item.markType==='check'
+       ?[[[.13,.53],[.41,.79]],[[.41,.79],[.89,.19]]]
+       :[[[.18,.18],[.82,.82]],[[.82,.18],[.18,.82]]];
+     const thickness=Math.max(1,Math.min(12,Number(item.stroke)||3));
+     for(const [from,to] of shape)
+       page.drawLine({start:point(...from),end:point(...to),
+         thickness,color:pdfColor(item.color||'#245881')});
    }
   }
   const bytes=await result.save(),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
