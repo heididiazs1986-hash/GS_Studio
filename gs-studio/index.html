@@ -88,6 +88,17 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 .page.image-page canvas{background:white;display:block;margin:0 auto;object-fit:contain}
 .page.image-page:focus-visible{outline:3px solid var(--gs-orange)}
 @media(max-width:750px){.image-settings-grid{grid-template-columns:1fr}.image-settings{padding:13px}.image-settings-header{flex-wrap:wrap}.image-settings-note{white-space:normal}.page.image-page .image-card-toolbar button{padding:7px 4px}}
+
+.organize-rotation-tools{border:1px solid #c8d9e7;background:#f0f6fc;border-radius:12px;padding:13px;margin:14px 0}
+.rotation-header{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:#245881}
+.rotation-header strong{font-size:14px}
+.rotation-header span{font-size:12px;color:#60778b}
+.rotation-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.rotation-controls button{min-height:41px;font-size:13px}
+.page.organize-page .image-card-toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.page.organize-page .image-card-toolbar button{border:1px solid #b6c9dc;background:white;border-radius:8px;font-size:18px;color:#245881;min-width:40px;min-height:40px;flex:1}
+.page.organize-page .image-card-toolbar button:focus-visible{outline:3px solid #ff6900;outline-offset:2px}
+.page.organize-page .page-move-hint{font-size:11px;color:#607990;margin-top:7px}
 </style><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/gs-studio/icons/pwa-192.png"><script defer src="/pwa-register.js"></script></head>
 <body><header><img class="brand-logo" src="./icons/studio-logo.svg" alt="GS Studio"><div><strong>GS Studio</strong><div class="subtitle">Centro de gestión documental - Gestión Social</div></div></header>
 <main><section class="hero"><div><span class="orange">GESTIÓN DOCUMENTAL</span><h1>Todos tus documentos en un solo lugar.</h1><p class="subtitle">Sin subir tus archivos a nuestros servidores. Conservamos los originales.</p></div></section>
@@ -122,6 +133,13 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 </div>
 <p id="imagePdfHint" class="image-settings-help">Recomendado: <b>Ajustado a cada imagen + sin margen</b>, para que cada fotografía ocupe su propia página sin bordes blancos añadidos.</p>
 <label class="image-merge-check"><input id="imageOnePdf" type="checkbox" checked disabled> Unir todas las imágenes en un único PDF</label>
+</section>
+<section id="organizeRotationTools" class="organize-rotation-tools hidden" aria-label="Opciones de giro de páginas PDF">
+<div class="rotation-header"><strong>Orientación de las páginas</strong><span>Gira cada página con ↶ o ↷ debajo de su miniatura, o gira todas a la vez.</span></div>
+<div class="rotation-controls">
+<button id="rotateAllLeft" class="secondary" type="button" disabled>↶ Girar todas a la izquierda</button>
+<button id="rotateAllRight" class="secondary" type="button" disabled>↷ Girar todas a la derecha</button>
+</div>
 </section>
 <div id="imageReorderHint" class="image-reorder-hint hidden"><strong>Organiza tus páginas:</strong> arrastra cualquier foto a otra posición. También puedes usar «Mover a posición» para listas largas. Gira cada imagen con las flechas ↶ ↷.</div>
 <div id="pages" class="pages"></div>
