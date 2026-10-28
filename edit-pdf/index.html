@@ -2,6 +2,8 @@
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#ff6900"><title>Editar PDF · GS Studio</title>
 <style>
+.discarded-tray{margin-bottom:14px;padding:12px;border:1px solid #e2c7b7;border-radius:11px;background:#fffaf6}.discarded-tray summary{cursor:pointer;font-weight:800;color:#91451c}.discarded-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f0dfd3;font-size:12px}.discarded-row button{min-height:32px;padding:5px 8px}@media(max-width:650px){.discarded-tray{max-height:230px;overflow:auto}}
+
 :root{font-family:Manrope,"Segoe UI",system-ui,sans-serif;--orange:#ff6900;--blue:#245881;--navy:#192a3c;--muted:#60758c;--line:#d7e1ed;background:#f3f6fa;color:var(--navy)}
 *{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer}
 header{background:white;border-bottom:1px solid var(--line);padding:14px max(20px,calc((100vw - 1380px)/2));display:flex;align-items:center;gap:15px}
@@ -115,7 +117,7 @@ button.active{background:var(--blue);color:#fff;border-color:var(--blue)}button:
 <div class="viewer-head"><strong>Vista del documento</strong><div class="zoom-controls"><button id="zoomOut" title="Reducir zoom" type="button">−</button><output id="zoomValue">100%</output><button id="zoomIn" title="Ampliar zoom" type="button">+</button><button id="fitWidth" type="button">Ajustar al ancho</button></div></div>
 <div class="viewer"><div class="sheet" id="sheet"><canvas id="pageCanvas"></canvas><div id="overlay" class="overlay"></div></div></div>
 </section>
-<aside class="panel sidebar sidebar-tools">
+<aside class="panel sidebar sidebar-tools"><details class="discarded-tray" open><summary>Descartados (<span id="discardedCount">0</span>)</summary><p class="hint">Páginas recuperables durante esta sesión.</p><div id="discardedPages"></div><button id="restoreAllDiscarded" type="button" disabled>Restaurar todas</button></details>
 <h2>HERRAMIENTAS DE EDICIÓN</h2>
 <div class="tool-stack">
 <button data-mode="select" class="active"><span class="tool-icon">↔</span> Seleccionar / mover</button>
