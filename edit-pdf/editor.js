@@ -268,7 +268,7 @@ async function loadFile(file){
   viewDoc=await pdfjsLib.getDocument({data:original.slice()}).promise;
   items=[];selected=null;selectedPage=0;deskew={};zoom=1;
   pageOrder=Array.from({length:viewDoc.numPages},(_,i)=>i);
-  selectedPages=new Set();pageOrderHistory=[];
+  selectedPages=new Set();pageOrderHistory=[];discardedPages=[];
   renderThumbs();
   await showPage(pageOrder[0]);$('save').disabled=false;status(viewDoc.numPages+' página(s). Puedes editar y seleccionar varias páginas para organizarlas.');
  }catch(e){status('No se pudo abrir el PDF: '+e.message)}
@@ -660,7 +660,7 @@ $('save').onclick=async()=>{
   setTimeout(()=>URL.revokeObjectURL(url),30000);
   // Clear all document data held by this editor once the download has started.
   original=null;doc=null;items=[];selected=null;gesture=null;deskew={};samplingColor=false;
-  pageOrder=[];selectedPages.clear();pageOrderHistory=[];updateBulkToolbar();
+  pageOrder=[];selectedPages.clear();pageOrderHistory=[];discardedPages=[];updateBulkToolbar();
   if(window.__gsThumbnailObserver){window.__gsThumbnailObserver.disconnect();window.__gsThumbnailObserver=null;}
   if(viewDoc){viewDoc.destroy().catch(()=>{});viewDoc=null;}
   $('file').value='';$('thumbs').replaceChildren();
