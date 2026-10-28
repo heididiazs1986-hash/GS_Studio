@@ -234,7 +234,8 @@ function openInlineText(item){
  field.oninput=()=>{
   const ctx=document.createElement('canvas').getContext('2d');ctx.font=getComputedStyle(field).font;
   const longest=field.value.split('\n').reduce((n,line)=>Math.max(n,ctx.measureText(line||' ').width),0);
-  field.style.width=Math.min((1-item.x)*area.width-4,Math.max(110,longest+25))+'px';
+  const available=Math.max(24,(1-item.x)*area.width-4);
+  field.style.width=Math.min(available,Math.max(Math.min(110,available),longest+25))+'px';
   item.w=Math.min(1-item.x,field.getBoundingClientRect().width/Math.max(1,area.width));
   item.text=field.value;
   field.style.height='auto';
