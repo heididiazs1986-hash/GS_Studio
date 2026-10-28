@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={},zoom=1,renderVersion=0,samplingColor=false,inlineEditor=null,pageOrder=[],selectedPages=new Set(),pageOrderHistory=[];
+let original=null,viewDoc=null,doc=null,selectedPage=0,mode='select',items=[],selected=null,gesture=null,deskew={},zoom=1,renderVersion=0,samplingColor=false,inlineEditor=null,pageOrder=[],selectedPages=new Set(),pageOrderHistory=[],discardedPages=[];
 const sheet=$('sheet'),overlay=$('overlay'),status=s=>{$('status').textContent=s};
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 $('textSettings').style.display='none';
@@ -83,8 +83,28 @@ function renderThumbs(){
     })();
   }
  });
- updateBulkToolbar();
+ updateBulkToolbar();renderDiscardedPages();
 }
+function renderDiscardedPages(){
+ const tray=$('discardedPages');if(!tray)return;
+ discardedPages=discardedPages.filter(entry=>!pageOrder.includes(entry.index));
+ $('discardedCount').textContent=discardedPages.length;tray.replaceChildren();
+ $('restoreAllDiscarded').disabled=!discardedPages.length;
+ for(const entry of discardedPages){
+ const row=document.createElement('div');row.className='discarded-row';
+ const label=document.createElement('span');label.textContent='Original '+(entry.index+1);
+ const btn=document.createElement('button');btn.type='button';btn.textContent='Restaurar';
+ btn.onclick=()=>restoreDiscarded([entry.index]);row.append(label,btn);tray.append(row);
+ }
+}
+function restoreDiscarded(indices){
+ const found=discardedPages.filter(e=>indices.includes(e.index)).sort((a,b)=>a.position-b.position);
+ if(!found.length)return;rememberPageOperation();
+ for(const e of found)pageOrder.splice(Math.min(e.position,pageOrder.length),0,e.index);
+ discardedPages=discardedPages.filter(e=>!indices.includes(e.index));renderThumbs();
+ status(found.length+' página(s) restauradas.');
+}
+$('restoreAllDiscarded').onclick=()=>restoreDiscarded(discardedPages.map(e=>e.index));
 function rememberPageOperation(){
  pageOrderHistory.push([...pageOrder]);
  if(pageOrderHistory.length>25)pageOrderHistory.shift();
@@ -119,6 +139,7 @@ $('deleteSelected').onclick=()=>{
  if(!confirm('¿Eliminar '+selectedPages.size+' página(s) de la copia que vas a generar? El archivo original no se modificará.'))return;
  const oldPosition=pageOrder.indexOf(selectedPage);
  rememberPageOperation();
+ for(const index of selectedPages)discardedPages.push({index,position:pageOrder.indexOf(index)});
  pageOrder=pageOrder.filter(index=>!selectedPages.has(index));
  const deleted=selectedPages.size;selectedPages.clear();
  renderThumbs();
@@ -129,6 +150,7 @@ $('deleteSelected').onclick=()=>{
 $('undoPageOperation').onclick=()=>{
  if(!pageOrderHistory.length)return;
  pageOrder=pageOrderHistory.pop();
+ discardedPages=discardedPages.filter(e=>!pageOrder.includes(e.index));
  selectedPages.clear();renderThumbs();
  showPage(pageOrder.includes(selectedPage)?selectedPage:pageOrder[0]);
  status('Se recuperó el orden y las páginas de la operación anterior.');
@@ -210,6 +232,10 @@ function openInlineText(item){
  field.style.lineHeight='1.25';
  field.onpointerdown=e=>e.stopPropagation();
  field.oninput=()=>{
+  const ctx=document.createElement('canvas').getContext('2d');ctx.font=getComputedStyle(field).font;
+  const longest=field.value.split('\n').reduce((n,line)=>Math.max(n,ctx.measureText(line||' ').width),0);
+  field.style.width=Math.min((1-item.x)*area.width-4,Math.max(110,longest+25))+'px';
+  item.w=Math.min(1-item.x,field.getBoundingClientRect().width/Math.max(1,area.width));
   item.text=field.value;
   field.style.height='auto';
   field.style.height=Math.max(42,field.scrollHeight+6)+'px';
@@ -222,6 +248,7 @@ function openInlineText(item){
  field.onblur=()=>finishInlineText();
  inlineEditor={field,item,before:item.text||''};
  overlay.append(field);
+ field.oninput();
  // A text box created during pointerdown can immediately lose focus to that
  // pointerdown's browser default action. Focus on the next animation frame.
  const activeField=field;
