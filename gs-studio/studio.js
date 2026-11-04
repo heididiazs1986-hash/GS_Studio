@@ -4,6 +4,7 @@
   const $ = id => document.getElementById(id);
   const labels = { merge: 'Unir PDF', images: 'Imágenes a PDF', organize: 'Organizar PDF', split: 'Dividir PDF', sign: 'Firmar PDF' };
   const order = ['TD', 'E1', 'E6', 'AR', 'DJ', 'RETIE', 'EC'];
+  let selectedPageIds = new Set(), nextPageId = 1;
   let tool = 'merge', pages = [], signatureFile = null, signDirty = false, inEditor = false;
   const imageOptionDefaults = {imageOrientation:'auto',imagePageSize:'image',imageMargin:'0',imageFit:'contain'};
   const getImageOptions = () => Object.fromEntries(Object.keys(imageOptionDefaults).map(key=>[key,$(key).value]));
@@ -47,7 +48,7 @@
       source.previewPdfPromise.then(pdf=>pdf.destroy()).catch(()=>{});
       source.previewPdfPromise=null;
     }
-    pages = [];
+    pages = []; selectedPageIds.clear();
     for(const [id,value] of Object.entries(imageOptionDefaults))$(id).value=value;
     $('fileInput').value = '';
     $('pages').replaceChildren();
@@ -394,6 +395,30 @@
       if (drag?.from === index) { drag = null; card.classList.remove('dragging-page'); clearTargets(); }
     });
   }
+  function updateSelectionControls() {
+    const bar=$('organizeSelectionTools');
+    if(!bar)return;
+    bar.classList.toggle('hidden',tool!=='organize'||!pages.length);
+    const count=pages.filter(p=>selectedPageIds.has(p.selectionId)).length;
+    $('selectedPagesCount').textContent=count+' página(s) seleccionada(s)';
+    $('deleteSelectedPages').disabled=!count;
+    $('selectAllPages').disabled=count===pages.length;
+    $('clearSelectedPages').disabled=!count;
+  }
+  $('selectAllPages').addEventListener('click',()=>{
+    pages.forEach(p=>{p.selectionId??=nextPageId++;selectedPageIds.add(p.selectionId);});
+    render();
+  });
+  $('clearSelectedPages').addEventListener('click',()=>{selectedPageIds.clear();render();});
+  $('deleteSelectedPages').addEventListener('click',()=>{
+    const count=pages.filter(p=>selectedPageIds.has(p.selectionId)).length;
+    if(!count)return;
+    if(!window.confirm('¿Eliminar '+count+' página(s) seleccionada(s) del PDF que vas a generar?'))return;
+    pages=pages.filter(p=>!selectedPageIds.has(p.selectionId));
+    selectedPageIds.clear();
+    render();
+    say(count+' página(s) eliminada(s). El PDF original no se modifica.');
+  });
   function render() {
     const host = $('pages'); host.replaceChildren();
     pages.forEach((entry, index) => {
@@ -409,6 +434,21 @@
           const next=Math.max(0,Math.min(pages.length-1,index+delta));
           if(next!==index){reorder(index,next);$('pages').children[next]?.focus();}
         });
+      }
+      if(tool==='organize'){
+        entry.selectionId??=nextPageId++;
+        const pick=document.createElement('label');pick.className='page-select-label';
+        const checkbox=document.createElement('input');checkbox.type='checkbox';
+        checkbox.checked=selectedPageIds.has(entry.selectionId);
+        checkbox.setAttribute('aria-label','Seleccionar página '+(index+1));
+        checkbox.addEventListener('change',()=>{
+          if(checkbox.checked)selectedPageIds.add(entry.selectionId);
+          else selectedPageIds.delete(entry.selectionId);
+          card.classList.toggle('selected-page',checkbox.checked);
+          updateSelectionControls();
+        });
+        pick.append(checkbox,document.createTextNode(' Seleccionar'));
+        card.prepend(pick);card.classList.toggle('selected-page',checkbox.checked);
       }
       const canvas = document.createElement('canvas'); card.append(canvas);
       const caption = document.createElement('div');
@@ -454,7 +494,7 @@
         add('↶', 'Girar página 90° a la izquierda', () => rotatePdf(270));
         add('↷', 'Girar página 90° a la derecha', () => rotatePdf(90));
       }
-      add('×', 'Eliminar de la selección', () => { pages.splice(index, 1); render(); });
+      add('×', 'Eliminar esta página', () => { selectedPageIds.delete(entry.selectionId); pages.splice(index, 1); render(); });
       if(entry.type==='image'||(entry.type==='pdf'&&tool==='organize')){
         nav.classList.add('image-card-toolbar');
         const info=document.createElement('div');info.className='page-move-hint';
@@ -482,6 +522,7 @@
         });
       }
     });
+    updateSelectionControls();
     $('exportBtn').disabled = !pages.length;
     $('rotateAllLeft').disabled = tool!=='organize' || !pages.some(entry=>entry.type==='pdf');
     $('rotateAllRight').disabled = tool!=='organize' || !pages.some(entry=>entry.type==='pdf');
