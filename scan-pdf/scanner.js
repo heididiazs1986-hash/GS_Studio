@@ -1,21 +1,30 @@
-/* GS Studio — escáner exclusivo para celulares. Todo se procesa en el navegador. */
+/* GS Studio — escáner exclusivo para celulares. Todo se procesa en el navegador.
+ * La visión (detección de hoja, perspectiva, acabado) vive en engine.js. */
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
 const isMobile=(navigator.userAgentData?.mobile===true || /Mobi|iPhone|iPod|Android|Windows Phone|BlackBerry|BB10|webOS|Opera Mini|KaiOS/i.test(navigator.userAgent||'') || (navigator.maxTouchPoints>0 && Math.min(screen.width,screen.height)<=820 && matchMedia('(pointer:coarse)').matches));
 $('gate').hidden=isMobile;$('scanner').hidden=!isMobile;
 if(!isMobile)return;
+const Scan=window.GSScan;
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const status=s=>{$('status').textContent=s};
 const crop=$('cropCanvas'),pen=crop.getContext('2d',{willReadFrequently:true});
-let stream=null,source=null,corners=null,cornerIndex=-1,preset='enhance',busy=false;
+const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+const defaultCorners=()=>[{x:.045,y:.045},{x:.955,y:.045},{x:.955,y:.955},{x:.045,y:.955}];
+const STABLE_TICKS=5;           // ≈1,2 s con la hoja quieta antes de la captura automática
+const PDF_SIZES={A4:[595.28,841.89],Carta:[612,792],Oficio:[612,936],Legal:[612,1008]};
+
+let stream=null,imageCapture=null,torchOn=false,capturing=false;
+let source=null,sourceData=null,corners=null,cornerIndex=-1,grabOffset={x:0,y:0},preset='enhance',busy=false;
 let documents=[],queue=[],drag=null,previewVersion=0,previewReady=false,automaticCrop=false,directImportBusy=false;
 let cameraDetectionToken=0,liveCorners=null,lastLiveAt=0,wasCameraCapture=false;
-const defaultCorners=()=>[{x:.045,y:.045},{x:.955,y:.045},{x:.955,y:.955},{x:.045,y:.955}];
-const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+let smoothed=null,stableTicks=0,autoCapture=true;
+let baseCache={key:'',canvas:null};
 
-async function canvasFromImage(file,maxDimension=2350){
+/* ───────── imágenes ───────── */
+async function canvasFromImage(file,maxDimension=3200){
   let picture,objectURL=null;
   if(typeof createImageBitmap==='function')try{picture=await createImageBitmap(file,{imageOrientation:'from-image'})}catch(_){}
   if(!picture){
@@ -26,133 +35,25 @@ async function canvasFromImage(file,maxDimension=2350){
       picture=img;
     }finally{URL.revokeObjectURL(objectURL)}
   }
-  const scale=Math.min(1,maxDimension/Math.max(picture.width||picture.naturalWidth,picture.height||picture.naturalHeight));
-  const w=Math.max(1,Math.round((picture.width||picture.naturalWidth)*scale));
-  const h=Math.max(1,Math.round((picture.height||picture.naturalHeight)*scale));
+  const pw=picture.width||picture.naturalWidth,ph=picture.height||picture.naturalHeight;
+  const scale=Math.min(1,maxDimension/Math.max(pw,ph));
+  const w=Math.max(1,Math.round(pw*scale)),h=Math.max(1,Math.round(ph*scale));
   const c=document.createElement('canvas');c.width=w;c.height=h;
   c.getContext('2d',{willReadFrequently:true}).drawImage(picture,0,0,w,h);
   picture.close?.();
   return c;
 }
-// Conservative four-edge estimate; users can always correct corners manually.
-function detectCorners(image){
-  const factor=Math.min(1,320/Math.max(image.width,image.height));
-  const c=document.createElement('canvas');
-  c.width=Math.max(80,Math.round(image.width*factor));
-  c.height=Math.max(80,Math.round(image.height*factor));
-  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,c.width,c.height);
-  const w=c.width,h=c.height,data=ctx.getImageData(0,0,w,h).data;
-  const gray=(x,y)=>{const i=4*(y*w+x);return .299*data[i]+.587*data[i+1]+.114*data[i+2]};
-  function edge(axis,last){
-    const horizontal=axis==='x',long=horizontal?h:w,short=horizontal?w:h,points=[];
-    const low=Math.floor(short*(last?.62:.025));
-    const high=Math.ceil(short*(last?.975:.38));
-    for(let k=Math.ceil(long*.14);k<long*.87;k+=Math.max(3,Math.round(long/22))){
-      let best=0,bestAt=-1;
-      for(let n=Math.max(3,low);n<Math.min(short-3,high);n++){
-        const a=horizontal?gray(n-2,k):gray(k,n-2);
-        const b=horizontal?gray(n+2,k):gray(k,n+2);
-        if(Math.abs(b-a)>best){best=Math.abs(b-a);bestAt=n}
-      }
-      if(best>30)points.push([k,bestAt]);
-    }
-    if(points.length<7)return null;
-    const median=points.map(p=>p[1]).sort((a,b)=>a-b)[Math.floor(points.length/2)];
-    const inliers=points.filter(p=>Math.abs(p[1]-median)<short*.13);
-    if(inliers.length<6)return null;
-    const mx=inliers.reduce((a,p)=>a+p[0],0)/inliers.length;
-    const my=inliers.reduce((a,p)=>a+p[1],0)/inliers.length;
-    const den=inliers.reduce((a,p)=>a+(p[0]-mx)**2,0);
-    if(!den)return null;
-    const slope=inliers.reduce((a,p)=>a+(p[0]-mx)*(p[1]-my),0)/den;
-    return {slope,intercept:my-slope*mx};
-  }
-  const l=edge('x',false),r=edge('x',true),t=edge('y',false),b=edge('y',true);
-  if(!l||!r||!t||!b)return null;
-  const intersect=(v,hz)=>{
-    const y=(hz.slope*v.intercept+hz.intercept)/(1-hz.slope*v.slope);
-    return {x:clamp((v.slope*y+v.intercept)/w,0,1),y:clamp(y/h,0,1)};
-  };
-  const q=[intersect(l,t),intersect(r,t),intersect(r,b),intersect(l,b)];
-  if(q.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return null;
-  const area=Math.abs(q.reduce((a,p,i)=>a+p.x*q[(i+1)%4].y-q[(i+1)%4].x*p.y,0))/2;
-  const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
-  if(area<.25||q.some((p,i)=>cross(p,q[(i+1)%4],q[(i+2)%4])<=0))return null;
-  if(distance(q[0],q[1])<.45||distance(q[1],q[2])<.45)return null;
-  return q;
+const makeJpeg=(canvas,quality=.9)=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('No se pudo generar la imagen.')),'image/jpeg',quality));
+function getSourceData(){
+  if(!sourceData)sourceData=source.getContext('2d',{willReadFrequently:true}).getImageData(0,0,source.width,source.height);
+  return sourceData;
 }
-function detectPaperByContrast(image){
-  // Fallback detector for light paper photographed against a darker desk.
-  // It is conservative: if the boundary is ambiguous, retain the whole image.
-  const c=document.createElement('canvas');
-  const scale=Math.min(1,320/Math.max(image.width,image.height));
-  c.width=Math.max(80,Math.round(image.width*scale));
-  c.height=Math.max(80,Math.round(image.height*scale));
-  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,c.width,c.height);
-  const {width:w,height:h}=c,data=ctx.getImageData(0,0,w,h).data;
-  const lum=(x,y)=>{const i=(y*w+x)*4;return .2126*data[i]+.7152*data[i+1]+.0722*data[i+2]};
-  function median(a){a.sort((x,y)=>x-y);return a[Math.floor(a.length/2)]}
-  const background=[];
-  for(let y of [3,Math.floor(h*.07),h-4])for(let x of [3,Math.floor(w*.07),w-4])background.push(lum(x,y));
-  const base=median(background);
-  const inside=[];
-  for(let y of [.32,.45,.58,.7])for(let x of [.28,.4,.58,.7])inside.push(lum(Math.floor(w*x),Math.floor(h*y)));
-  const center=median(inside);
-  // White/blue paper must be noticeably brighter than the surrounding table.
-  const delta=center-base;
-  if(delta<23)return null;
-  const threshold=base+Math.max(13,delta*.41), left=[],right=[],top=[],bottom=[];
-  for(let y=Math.floor(h*.25);y<h*.77;y+=Math.max(3,Math.floor(h/24))){
-    const candidates=[];
-    for(let x=3;x<w-3;x++)if(lum(x,y)>threshold)candidates.push(x);
-    if(candidates.length<w*.3)continue;
-    const l=Math.min(...candidates),r=Math.max(...candidates);
-    if(r-l>w*.42 && l>w*.015 && r<w*.985){left.push([y,l]);right.push([y,r]);}
-  }
-  for(let x=Math.floor(w*.28);x<w*.74;x+=Math.max(3,Math.floor(w/24))){
-    const candidates=[];
-    for(let y=3;y<h-3;y++)if(lum(x,y)>threshold)candidates.push(y);
-    if(candidates.length<h*.3)continue;
-    const t=Math.min(...candidates),b=Math.max(...candidates);
-    if(b-t>h*.42 && t>h*.015 && b<h*.985){top.push([x,t]);bottom.push([x,b]);}
-  }
-  function fit(points){
-    if(points.length<4)return null;
-    const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);
-    const mx=xs.reduce((a,x)=>a+x,0)/xs.length,my=ys.reduce((a,y)=>a+y,0)/ys.length;
-    const den=xs.reduce((a,x)=>a+(x-mx)**2,0);
-    if(!den)return null;
-    const slope=points.reduce((a,p)=>a+(p[0]-mx)*(p[1]-my),0)/den;
-    return {m:slope,b:my-slope*mx};
-  }
-  const lines=[fit(left),fit(right),fit(top),fit(bottom)];
-  if(lines.some(x=>!x))return null;
-  const cross=(vertical,horizontal)=>{
-    const y=(horizontal.m*vertical.b+horizontal.b)/(1-horizontal.m*vertical.m);
-    return {x:(vertical.m*y+vertical.b)/w,y:y/h};
-  };
-  const [l,r,t,b]=lines,quad=[cross(l,t),cross(r,t),cross(r,b),cross(l,b)];
-  if(quad.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<.005||p.x>.995||p.y<.005||p.y>.995))return null;
-  const area=Math.abs(quad.reduce((sum,p,i)=>sum+p.x*quad[(i+1)%4].y-quad[(i+1)%4].x*p.y,0))/2;
-  if(area<.26)return null;
-  return quad;
+function findPaper(image,refine=true){
+  const result=Scan.detect(image,{refine});
+  return result&&result.confidence>=.3?result.corners:null;
 }
-function findPaper(image){return detectCorners(image)||detectPaperByContrast(image)}
-function detectWithEngine(image){
-  const detector=window.GSScannerDetector;
-  if(detector?.ready){
-    const scale=Math.min(1,440/Math.max(image.width,image.height));
-    const small=document.createElement('canvas');
-    small.width=Math.max(1,Math.round(image.width*scale));
-    small.height=Math.max(1,Math.round(image.height*scale));
-    try{
-      small.getContext('2d',{willReadFrequently:true}).drawImage(image,0,0,small.width,small.height);
-      const r=detector.detect(small);
-      if(r?.confidence>=.3)return r.corners;
-    }finally{small.width=small.height=1}
-  }
-  return findPaper(image);
-}
+
+/* ───────── guía y detección en la cámara ───────── */
 function cameraGuideCorners(){
   const panel=$('cameraPanel').getBoundingClientRect(),guide=document.querySelector('.camera-outline').getBoundingClientRect();
   const video=$('video'),vw=video.videoWidth,vh=video.videoHeight;
@@ -164,52 +65,58 @@ function cameraGuideCorners(){
   return [{x:x(guide.left),y:y(guide.top)},{x:x(guide.right),y:y(guide.top)},
     {x:x(guide.right),y:y(guide.bottom)},{x:x(guide.left),y:y(guide.bottom)}];
 }
-function drawDetectedContour(corners){
+function drawDetectedContour(found,progress){
   const overlay=$('cameraEdges'),panel=$('cameraPanel'),video=$('video');
   if(!panel.isConnected)return;
   const rect=panel.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
   const w=rect.width,h=rect.height;
   overlay.width=Math.round(w*ratio);overlay.height=Math.round(h*ratio);
   const ctx=overlay.getContext('2d');ctx.scale(ratio,ratio);
-  if(!corners||!video.videoWidth)return;
+  if(!found||!video.videoWidth)return;
   const factor=Math.max(w/video.videoWidth,h/video.videoHeight);
   const imgW=video.videoWidth*factor,imgH=video.videoHeight*factor;
   const ox=(w-imgW)/2,oy=(h-imgH)/2;
-  const pts=corners.map(p=>({x:ox+p.x*imgW,y:oy+p.y*imgH}));
-  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
-  pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();
+  const pts=found.map(p=>({x:ox+p.x*imgW,y:oy+p.y*imgH}));
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();
+  ctx.fillStyle='rgba(255,105,0,'+(.10+.14*progress)+')';ctx.fill();
   ctx.lineWidth=4;ctx.strokeStyle='#ff6900';ctx.shadowColor='#101b27';ctx.shadowBlur=8;ctx.stroke();ctx.shadowBlur=0;
   pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke()});
 }
-function updateCameraDetection(corners){
-  const found=Boolean(corners),message=found?'Documento detectado':'Centra la hoja y mantén el teléfono estable';
+function updateCameraDetection(found,progress=0){
+  const message=found?(autoCapture?(progress>0?'Mantén firme…':'Hoja detectada'):'Hoja detectada · toca capturar'):'Centra la hoja completa en la pantalla';
   if($('cameraHint').textContent!==message)$('cameraHint').textContent=message;
   $('cameraDetection').innerHTML=found?'Bordes<br>detectados':'Buscando<br>bordes…';
-  document.querySelector('.camera-outline').classList.toggle('detected',found);
-  drawDetectedContour(corners);
+  document.querySelector('.camera-outline').classList.toggle('detected',!!found);
+  $('shutterRing').style.setProperty('--p',String(progress));
+  drawDetectedContour(found,progress);
 }
 function runLiveDetection(token){
-  const sample=document.createElement('canvas');
+  const video=$('video');
   let timer=null;
-  const release=()=>{if(timer)clearTimeout(timer);sample.width=sample.height=1};
   function tick(){
-    if(token!==cameraDetectionToken||!stream||!$('video').videoWidth){release();return}
-    try{
-      const video=$('video'),ratio=Math.min(1,390/Math.max(video.videoWidth,video.videoHeight));
-      sample.width=Math.max(1,Math.round(video.videoWidth*ratio));
-      sample.height=Math.max(1,Math.round(video.videoHeight*ratio));
-      sample.getContext('2d',{willReadFrequently:true}).drawImage(video,0,0,sample.width,sample.height);
-      const found=detectWithEngine(sample);
-      liveCorners=found?found.map(p=>({...p})):null;
-      lastLiveAt=found?performance.now():0;
-      updateCameraDetection(found);
+    if(token!==cameraDetectionToken||!stream||!video.videoWidth){clearTimeout(timer);return}
+    let progress=0,shown=null;
+    if(!document.hidden&&!capturing)try{
+      const result=Scan.detect(video,{maxSide:280});
+      const found=result&&result.confidence>=.3?result:null;
+      if(found){
+        // Se promedian los cuadros para que el contorno no tiemble y se detecta cuándo la hoja se queda quieta.
+        const moved=smoothed?Math.max(...found.corners.map((p,i)=>distance(p,smoothed[i]))):1;
+        if(!smoothed||moved>.08)smoothed=found.corners.map(p=>({...p}));
+        else smoothed=smoothed.map((p,i)=>({x:p.x*.5+found.corners[i].x*.5,y:p.y*.5+found.corners[i].y*.5}));
+        stableTicks=moved<.012?stableTicks+1:0;
+        liveCorners=smoothed.map(p=>({...p}));lastLiveAt=performance.now();
+        shown=smoothed;progress=autoCapture&&found.confidence>=.45?Math.min(1,stableTicks/STABLE_TICKS):0;
+        if(progress>=1){updateCameraDetection(shown,1);capture();return}
+      }else{smoothed=null;stableTicks=0;liveCorners=null;lastLiveAt=0}
+      updateCameraDetection(shown,progress);
     }catch(e){console.warn('Detección en vivo:',e)}
-    if(token!==cameraDetectionToken||!stream){release();return}
-    timer=setTimeout(tick,650);
+    timer=setTimeout(tick,230);
   }
   tick();
 }
 
+/* ───────── ajuste manual de esquinas (con lupa) ───────── */
 function drawCorners(){
   if(!source)return;
   const area=document.querySelector('.edit-surface');
@@ -233,6 +140,22 @@ function drawCorners(){
     pen.fillStyle='#fff';pen.fill();pen.strokeStyle='#ff6900';pen.lineWidth=3;pen.stroke();
     pen.fillStyle='#245881';pen.font='bold 12px sans-serif';pen.fillText(String(i+1),p.x+11,p.y-11);
   });
+  if(cornerIndex>=0)drawLoupe(coords[cornerIndex]);
+}
+// Lupa: el dedo tapa la esquina, así que se muestra ampliada en un círculo desplazado.
+function drawLoupe(point){
+  const r=Math.min(58,crop.width*.2),zoom=3,sw=source.width/crop.width,sh=source.height/crop.height;
+  let cx=point.x,cy=point.y-r-34;
+  if(cy-r<4)cy=point.y+r+34;
+  cx=clamp(cx,r+4,crop.width-r-4);cy=clamp(cy,r+4,crop.height-r-4);
+  pen.save();pen.beginPath();pen.arc(cx,cy,r,0,Math.PI*2);pen.clip();
+  pen.fillStyle='#fff';pen.fillRect(cx-r,cy-r,r*2,r*2);
+  const srcW=(r*2/zoom)*sw,srcH=(r*2/zoom)*sh;
+  pen.drawImage(source,point.x*sw-srcW/2,point.y*sh-srcH/2,srcW,srcH,cx-r,cy-r,r*2,r*2);
+  pen.restore();
+  pen.strokeStyle='#ff6900';pen.lineWidth=3;pen.beginPath();pen.arc(cx,cy,r,0,Math.PI*2);pen.stroke();
+  pen.strokeStyle='#ff6900';pen.lineWidth=1.5;pen.beginPath();
+  pen.moveTo(cx-10,cy);pen.lineTo(cx+10,cy);pen.moveTo(cx,cy-10);pen.lineTo(cx,cy+10);pen.stroke();
 }
 const normalized=event=>{
   const rect=crop.getBoundingClientRect();
@@ -242,37 +165,56 @@ crop.addEventListener('pointerdown',event=>{
   if(!source)return;
   const p=normalized(event);
   cornerIndex=corners.reduce((best,c,i)=>distance(c,p)<distance(corners[best],p)?i:best,0);
+  grabOffset={x:corners[cornerIndex].x-p.x,y:corners[cornerIndex].y-p.y}; // la esquina no «salta» bajo el dedo
   crop.setPointerCapture(event.pointerId);
-  event.preventDefault();
+  drawCorners();event.preventDefault();
 });
 crop.addEventListener('pointermove',event=>{
   if(cornerIndex<0)return;
-  corners[cornerIndex]=normalized(event);drawCorners();
+  const p=normalized(event);
+  corners[cornerIndex]={x:clamp(p.x+grabOffset.x,0,1),y:clamp(p.y+grabOffset.y,0,1)};drawCorners();
 });
 for(const name of ['pointerup','pointercancel','lostpointercapture'])
-  crop.addEventListener(name,()=>{cornerIndex=-1});
+  crop.addEventListener(name,()=>{if(cornerIndex>=0){cornerIndex=-1;drawCorners()}});
 $('resetBounds').onclick=()=>{if(source){corners=defaultCorners();drawCorners();$('quadHint').textContent='Esquinas restablecidas. Ajusta los puntos naranjas.'}};
 $('autoBounds').onclick=()=>{
   if(!source)return;
-  const result=detectCorners(source);corners=result||defaultCorners();drawCorners();
-  $('quadHint').textContent=result?'Bordes estimados. Verifica las cuatro esquinas.':'No se detectó un contorno confiable. Ajusta manualmente los cuatro puntos.';
+  const result=findPaper(source);corners=result||defaultCorners();drawCorners();
+  $('quadHint').textContent=result?'Bordes detectados. Verifica las cuatro esquinas.':'No se detectó un contorno confiable. Ajusta manualmente los cuatro puntos.';
 };
+
+/* ───────── vista previa ───────── */
 function setFilter(name,update=true){
   preset=name;document.querySelectorAll('[data-filter]').forEach(el=>el.classList.toggle('active',el.dataset.filter===name));
   if(source&&update)refreshPreview();
 }
+const cornerKey=()=>corners.map(p=>p.x.toFixed(4)+','+p.y.toFixed(4)).join('|')+'@'+source.width+'x'+source.height;
+// La perspectiva se calcula una sola vez por recorte; cambiar de filtro solo repite el acabado.
+async function previewBase(){
+  const key=cornerKey();
+  if(baseCache.key===key&&baseCache.canvas)return baseCache.canvas;
+  const size=Scan.estimateSize(corners,source.width,source.height,{maxSide:900,maxPixels:700000});
+  const canvas=await Scan.warp(getSourceData(),corners,size.w,size.h,{yieldFn:nextFrame});
+  if(baseCache.canvas)baseCache.canvas.width=baseCache.canvas.height=1;
+  baseCache={key,canvas};
+  return canvas;
+}
 async function refreshPreview(){
  if(!source)return;
- const seq=++previewVersion,photograph=source,quadrilateral=corners.map(p=>({...p})),effect=preset;
+ const seq=++previewVersion,photograph=source,effect=preset;
  previewReady=false;$('addScan').disabled=true;
  $('previewHint').textContent='Preparando vista previa…';
  try{
-  const result=await preparePage(photograph,quadrilateral,effect,850,680000);
-  if(seq!==previewVersion||source!==photograph){result.width=result.height=1;return}
-  const p=$('previewCanvas');p.width=result.width;p.height=result.height;
-  p.getContext('2d').drawImage(result,0,0);
-  result.width=result.height=1;previewReady=true;$('addScan').disabled=false;
-  $('previewHint').textContent=automaticCrop?'Recorte estimado automáticamente · revisa los bordes':'Recorte aproximado · puedes ajustarlo antes de guardar';
+  const base=await previewBase();
+  if(seq!==previewVersion||source!==photograph)return;
+  const work=document.createElement('canvas');work.width=base.width;work.height=base.height;
+  work.getContext('2d',{willReadFrequently:true}).drawImage(base,0,0);
+  await Scan.enhance(work,effect,nextFrame);
+  if(seq!==previewVersion||source!==photograph){work.width=work.height=1;return}
+  const p=$('previewCanvas');p.width=work.width;p.height=work.height;
+  p.getContext('2d').drawImage(work,0,0);
+  work.width=work.height=1;previewReady=true;$('addScan').disabled=false;
+  $('previewHint').textContent=automaticCrop?'Recorte automático · revisa los bordes':'Recorte aproximado · ajusta las esquinas si hace falta';
  }catch(e){if(seq===previewVersion){previewReady=false;$('previewHint').textContent='No se pudo preparar la imagen: '+e.message}}
 }
 $('editCornersBtn').onclick=()=>{
@@ -285,6 +227,12 @@ $('doneCorners').onclick=()=>{
  $('manualPanel').hidden=true;refreshPreview();
  $('editPanel').scrollIntoView({behavior:'smooth',block:'start'});
 };
+$('turnPhoto').onclick=()=>{
+ if(!source)return;
+ corners=[corners[3],corners[0],corners[1],corners[2]]; // gira 90° el resultado sin tocar la foto
+ if(!$('manualPanel').hidden)drawCorners();
+ refreshPreview();
+};
 document.querySelectorAll('[data-filter]').forEach(el=>el.onclick=()=>setFilter(el.dataset.filter));
 
 async function showNext(){
@@ -293,26 +241,34 @@ async function showNext(){
  const queued=queue.shift(),file=queued?.file||queued;
  try{
   source=await canvasFromImage(file);
+  sourceData=null;baseCache={key:'',canvas:null};
   wasCameraCapture=!!queued?.captured;
-  const detected=detectWithEngine(source)||queued?.liveCorners||null;
-  automaticCrop=!!detected;
-  corners=detected||queued?.guideCorners||defaultCorners();
+  status('Detectando bordes…');await nextFrame();
+  const detected=findPaper(source);
+  // Las esquinas de la guía o del video solo valen si la foto tiene el mismo encuadre que la imagen en vivo.
+  const sameFraming=queued?.videoAspect&&Math.abs(source.width/source.height-queued.videoAspect)/queued.videoAspect<.03;
+  const fallback=detected?null:(sameFraming?(queued.liveCorners||queued.guideCorners):null);
+  automaticCrop=!!detected||!!queued?.liveCorners&&sameFraming&&!detected;
+  corners=detected||fallback||defaultCorners();
   setFilter('enhance',false);
-  $('editPanel').hidden=false;$('manualPanel').hidden=true;
-  $('quadHint').textContent=automaticCrop?'Bordes estimados: revisa los cuatro puntos.':'Si el recorte no es correcto, mueve manualmente los cuatro puntos.';
+  $('editPanel').hidden=false;
+  const uncertain=!detected&&!(sameFraming&&queued?.liveCorners);
+  $('manualPanel').hidden=!uncertain;
+  $('quadHint').textContent=uncertain?'No se vieron los bordes con claridad. Mueve los cuatro puntos a las esquinas de la hoja.':'Bordes detectados: revisa los cuatro puntos.';
+  if(uncertain)drawCorners();
   await refreshPreview();
-  $('editPanel').scrollIntoView({behavior:'smooth',block:'start'});
-  status('Revisa el escaneo. Si se ve bien, toca Guardar esta página.');
+  (uncertain?$('manualPanel'):$('editPanel')).scrollIntoView({behavior:'smooth',block:uncertain?'center':'start'});
+  status(uncertain?'Ajusta las cuatro esquinas sobre la hoja y toca Ver resultado corregido.':'Revisa el escaneo. Si se ve bien, toca Guardar esta página.');
  }catch(e){source=null;status('No se pudo abrir la imagen: '+e.message)}
  finally{busy=false;if(!source&&queue.length)showNext()}
 }
 function enqueue(files){
-  const accepted=Array.from(files||[]).filter(f=>/^image\/(jpeg|png|webp|heic|heif)$/i.test(f.type));
+  const accepted=Array.from(files||[]).filter(f=>/^image\/(jpeg|png|webp|heic|heif)$/i.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name||''));
   if(!accepted.length){status('Selecciona fotografías JPG, PNG, WebP o HEIC compatible con tu teléfono.');return;}
   queue.push(...accepted.map(file=>({file,captured:false})));showNext();
 }
-// Las cámaras de distintas marcas guardan documentos corregidos como imágenes.
-// Se importan directamente, sin detectar ni recortar de nuevo sus bordes.
+
+/* ───────── importar escaneos ya recortados por el teléfono ───────── */
 const nativePicker=$('nativeScansInput');
 nativePicker.addEventListener('click',()=>{
  if(!directImportBusy)status('Selecciona tus escaneos en Galería o Archivos. Puedes elegir varias imágenes.');
@@ -334,7 +290,6 @@ nativePicker.addEventListener('change',async event=>{
    status('Importando escaneos: '+(i+1)+' de '+files.length+'…');
    await nextFrame();
    // Algunos gestores de archivos de Android entregan el MIME vacío o genérico.
-   // Admitimos extensiones fotográficas aun cuando file.type no venga informado.
    if(!(/^image\/(?!svg\+xml)/i.test(file.type||'') ||
          /\.(jpe?g|png|webp|heic|heif|bmp|gif)$/i.test(name))){
     failed++;errors.push(name+': selecciona una fotografía, no un PDF u otro archivo.');continue;
@@ -343,10 +298,8 @@ nativePicker.addEventListener('change',async event=>{
     if(!file.size)throw Error('El archivo está vacío.');
     const image=await canvasFromImage(file,3000);
     try{
-      const blob=await new Promise((resolve,reject)=>
-        image.toBlob(value=>value?resolve(value):reject(Error('No se pudo preparar la imagen.')),'image/jpeg',.93));
-      const url=URL.createObjectURL(blob);
-      documents.push({blob,url,w:image.width,h:image.height});
+      const blob=await makeJpeg(image,.93);
+      await addPage(blob,image.width,image.height,Scan.snapRatio(image.width,image.height));
       imported++;
     }finally{image.width=image.height=1}
    }catch(error){
@@ -371,47 +324,82 @@ nativePicker.addEventListener('change',async event=>{
 });
 $('galleryInput').addEventListener('change',event=>{enqueue(event.target.files);event.target.value=''});
 $('cameraFallback').addEventListener('change',event=>{enqueue(event.target.files);event.target.value=''});
+
+/* ───────── cámara ───────── */
 function stopCamera(){
-  cameraDetectionToken++;liveCorners=null;lastLiveAt=0;
-  updateCameraDetection(null);
+  cameraDetectionToken++;liveCorners=null;lastLiveAt=0;smoothed=null;stableTicks=0;capturing=false;
+  updateCameraDetection(null,0);
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}
+  imageCapture=null;torchOn=false;$('torchBtn').classList.remove('on');
   $('video').srcObject=null;$('cameraPanel').hidden=true;$('startCamera').disabled=false;
 }
 $('stopCamera').onclick=stopCamera;
+$('autoBtn').onclick=()=>{
+  autoCapture=!autoCapture;stableTicks=0;
+  $('autoBtn').classList.toggle('on',autoCapture);
+  $('autoBtn').setAttribute('aria-pressed',String(autoCapture));
+  $('autoBtn').textContent=autoCapture?'Auto ✓':'Auto';
+  updateCameraDetection(null,0);
+};
+$('torchBtn').onclick=async()=>{
+  const track=stream?.getVideoTracks()[0];if(!track)return;
+  try{
+    torchOn=!torchOn;
+    await track.applyConstraints({advanced:[{torch:torchOn}]});
+    $('torchBtn').classList.toggle('on',torchOn);
+  }catch(e){torchOn=false;$('torchBtn').classList.remove('on');status('Este teléfono no permite encender la linterna desde el navegador.')}
+};
 $('startCamera').onclick=async()=>{
   if(!navigator.mediaDevices?.getUserMedia){$('cameraFallback').click();status('Utiliza la cámara del celular para tomar la foto.');return}
   try{
     stopCamera();
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:2560}}});
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2160},height:{ideal:3840}}});
+    const track=stream.getVideoTracks()[0],caps=track.getCapabilities?.()||{};
     $('video').srcObject=stream;await $('video').play();
     $('cameraPanel').hidden=false;$('startCamera').disabled=true;
+    $('torchBtn').hidden=!caps.torch;
+    if(caps.focusMode?.includes?.('continuous'))track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
+    if(typeof ImageCapture==='function')try{imageCapture=new ImageCapture(track)}catch(_){imageCapture=null}
+    $('autoBtn').classList.toggle('on',autoCapture);$('autoBtn').textContent=autoCapture?'Auto ✓':'Auto';
     $('cameraPageCount').textContent=String(documents.length);
     const token=++cameraDetectionToken;
-    updateCameraDetection(null);
+    updateCameraDetection(null,0);
     runLiveDetection(token);
-    window.GSScannerDetector?.load().catch(error=>{
-      console.info('Detector ligero disponible como respaldo:',error.message);
-    });
-    status('Cámara abierta. Enfoca el papel y pulsa Capturar hoja.');
+    status('Cámara abierta. Enfoca la hoja completa: se captura sola al quedar quieta, o pulsa el botón.');
   }catch(e){
     stopCamera();status('No fue posible abrir la cámara ('+e.message+'). Usa la cámara del dispositivo.');
     $('cameraFallback').click();
   }
 };
-$('takePhoto').onclick=async()=>{
-  if(!stream||!$('video').videoWidth){status('Espera a que aparezca la imagen de la cámara.');return}
-  const temp=document.createElement('canvas');
-  temp.width=$('video').videoWidth;temp.height=$('video').videoHeight;
-  temp.getContext('2d').drawImage($('video'),0,0);
-  const photo=await new Promise(resolve=>temp.toBlob(resolve,'image/jpeg',.93));
+async function capture(){
+  const video=$('video');
+  if(!stream||capturing)return;
+  if(!video.videoWidth){status('Espera a que aparezca la imagen de la cámara.');return}
+  capturing=true;
   const live=liveCorners&&performance.now()-lastLiveAt<1600?liveCorners.map(p=>({...p})):null;
-  const guide=cameraGuideCorners();
-  temp.width=temp.height=1;stopCamera();
+  const guide=cameraGuideCorners(),videoAspect=video.videoWidth/video.videoHeight;
+  let photo=null;
+  // Si el navegador lo permite se usa la foto completa del sensor (mucho más nítida que un cuadro de video).
+  if(imageCapture)try{
+    photo=await Promise.race([imageCapture.takePhoto(),new Promise((_,fail)=>setTimeout(()=>fail(Error('tiempo agotado')),3500))]);
+  }catch(_){photo=null}
+  if(!photo){
+    const temp=document.createElement('canvas');
+    temp.width=video.videoWidth;temp.height=video.videoHeight;
+    temp.getContext('2d').drawImage(video,0,0);
+    photo=await makeJpeg(temp,.93).catch(()=>null);
+    temp.width=temp.height=1;
+  }
+  navigator.vibrate?.(25);
+  stopCamera();
   if(!photo){status('No fue posible capturar la foto.');return}
-  queue.push({file:photo,captured:true,liveCorners:live,guideCorners:guide});showNext();
-};
+  queue.push({file:photo,captured:true,liveCorners:live,guideCorners:guide,videoAspect});showNext();
+}
+$('takePhoto').onclick=capture;
 function resetPhoto(){
   if(source){source.width=source.height=1}
+  if(baseCache.canvas)baseCache.canvas.width=baseCache.canvas.height=1;
+  baseCache={key:'',canvas:null};sourceData=null;
   wasCameraCapture=false;source=null;corners=null;cornerIndex=-1;previewReady=false;previewVersion++;
   crop.width=crop.height=1;$('previewCanvas').width=$('previewCanvas').height=1;
   $('manualPanel').hidden=true;$('editPanel').hidden=true;
@@ -419,75 +407,33 @@ function resetPhoto(){
 $('discard').onclick=()=>{resetPhoto();status('Foto descartada.');showNext()};
 $('retryPhoto').onclick=()=>{resetPhoto();status('Vuelve a tomar la fotografía.');$('startCamera').click();};
 
-// Project a rectangular output to the selected four corners of the source image.
-function transformFor(corners,w,h){
-  const [tl,tr,br,bl]=corners.map(p=>({x:p.x*w,y:p.y*h}));
-  const dx1=tr.x-br.x,dx2=bl.x-br.x,dx3=tl.x-tr.x+br.x-bl.x;
-  const dy1=tr.y-br.y,dy2=bl.y-br.y,dy3=tl.y-tr.y+br.y-bl.y;
-  let g=0,k=0;
-  if(Math.abs(dx3)+Math.abs(dy3)>1e-8){
-    const det=dx1*dy2-dx2*dy1;
-    if(Math.abs(det)<1e-7)throw Error('Las esquinas no forman una hoja válida.');
-    g=(dx3*dy2-dx2*dy3)/det;k=(dx1*dy3-dx3*dy1)/det;
-  }
-  return{a:tr.x-tl.x+g*tr.x,b:bl.x-tl.x+k*bl.x,c:tl.x,
-    d:tr.y-tl.y+g*tr.y,e:bl.y-tl.y+k*bl.y,f:tl.y,g,k};
+/* ───────── páginas del documento ───────── */
+async function makeThumb(blob,rot){
+  const src=await canvasFromImage(blob,420);
+  const turned=rot%180!==0,c=document.createElement('canvas');
+  c.width=turned?src.height:src.width;c.height=turned?src.width:src.height;
+  const x=c.getContext('2d');x.translate(c.width/2,c.height/2);x.rotate(rot*Math.PI/180);x.drawImage(src,-src.width/2,-src.height/2);
+  src.width=src.height=1;
+  const thumb=await makeJpeg(c,.8);c.width=c.height=1;
+  return URL.createObjectURL(thumb);
 }
-async function preparePage(image,quadrilateral,filter,maxSide=1800,maxPixels=2200000){
-  const q=quadrilateral.map(p=>({x:p.x*image.width,y:p.y*image.height}));
-  const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
-  if(q.some((p,i)=>cross(p,q[(i+1)%4],q[(i+2)%4])<=0))throw Error('Las esquinas están cruzadas. Ajusta los cuatro puntos.');
-  const targetW=(distance(q[0],q[1])+distance(q[2],q[3]))/2;
-  const targetH=(distance(q[0],q[3])+distance(q[1],q[2]))/2;
-  if(targetW<70||targetH<70)throw Error('El área seleccionada es demasiado pequeña.');
-  const scale=Math.min(1,maxSide/Math.max(targetW,targetH),Math.sqrt(maxPixels/(targetW*targetH)));
-  const w=Math.max(120,Math.round(targetW*scale)),h=Math.max(120,Math.round(targetH*scale));
-  const data=image.getContext('2d',{willReadFrequently:true}).getImageData(0,0,image.width,image.height).data;
-  const out=document.createElement('canvas');out.width=w;out.height=h;
-  const ctx=out.getContext('2d',{willReadFrequently:true});
-  const pixels=ctx.createImageData(w,h),dst=pixels.data;
-  const m=transformFor(quadrilateral,image.width,image.height);
-  for(let y=0;y<h;y++){
-    const v=(y+.5)/h;
-    for(let x=0;x<w;x++){
-      const u=(x+.5)/w,den=m.g*u+m.k*v+1;
-      if(Math.abs(den)<1e-8)continue;
-      const px=clamp((m.a*u+m.b*v+m.c)/den,0,image.width-1);
-      const py=clamp((m.d*u+m.e*v+m.f)/den,0,image.height-1);
-      const ix=Math.floor(px),iy=Math.floor(py),fx=px-ix,fy=py-iy;
-      const x1=Math.min(image.width-1,ix+1),y1=Math.min(image.height-1,iy+1);
-      const i00=(iy*image.width+ix)*4,i10=(iy*image.width+x1)*4;
-      const i01=(y1*image.width+ix)*4,i11=(y1*image.width+x1)*4;
-      const w00=(1-fx)*(1-fy),w10=fx*(1-fy),w01=(1-fx)*fy,w11=fx*fy;
-      let R=data[i00]*w00+data[i10]*w10+data[i01]*w01+data[i11]*w11;
-      let G=data[i00+1]*w00+data[i10+1]*w10+data[i01+1]*w01+data[i11+1]*w11;
-      let B=data[i00+2]*w00+data[i10+2]*w10+data[i01+2]*w01+data[i11+2]*w11;
-      if(filter==='enhance'){
-        R=clamp((R-128)*1.16+139,0,255);
-        G=clamp((G-128)*1.16+139,0,255);
-        B=clamp((B-128)*1.16+139,0,255);
-      }else if(filter==='gray'||filter==='bw'){
-        const gray=.299*R+.587*G+.114*B;
-        R=G=B=filter==='bw'?(gray>163?255:0):clamp((gray-128)*1.13+135,0,255);
-      }
-      const o=(y*w+x)*4;dst[o]=R;dst[o+1]=G;dst[o+2]=B;dst[o+3]=255;
-    }
-    // Keep the interface responsive while warping larger scans on a phone.
-    if(y%96===95)await nextFrame();
-  }
-  ctx.putImageData(pixels,0,0);return out;
+async function addPage(blob,w,h,std){
+  const item={blob,w,h,std:std||null,rot:0,thumb:await makeThumb(blob,0)};
+  documents.push(item);return item;
 }
-const makeJpeg=canvas=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('No se pudo generar la imagen.')),'image/jpeg',.89));
 $('addScan').onclick=async()=>{
   if(!source||busy||!previewReady)return;
   busy=true;$('addScan').disabled=true;
   const reopenCamera=wasCameraCapture&&$('quickMode').checked;
-  status('Corrigiendo perspectiva…');await nextFrame();
+  status('Generando página en alta calidad…');await nextFrame();
   try{
-    const processed=await preparePage(source,corners,preset);
-    const blob=await makeJpeg(processed),url=URL.createObjectURL(blob);
-    documents.push({blob,url,w:processed.width,h:processed.height});
-    processed.width=processed.height=1;
+    // Resolución final: ≈210 ppp en una hoja A4, con la proporción real de la hoja.
+    const size=Scan.estimateSize(corners,source.width,source.height,{maxSide:2480,maxPixels:4300000});
+    const page=await Scan.warp(getSourceData(),corners,size.w,size.h,{yieldFn:nextFrame});
+    await Scan.enhance(page,preset,nextFrame);
+    const blob=await makeJpeg(page,.9);
+    await addPage(blob,page.width,page.height,size.std);
+    page.width=page.height=1;
     resetPhoto();renderPages();
     status('Página añadida. Escanea otra hoja o genera el PDF.');
   }catch(e){status('No se pudo preparar la página: '+e.message)}
@@ -499,15 +445,12 @@ $('addScan').onclick=async()=>{
 };
 async function rotate(index){
   const item=documents[index];if(!item)return;
-  const src=await canvasFromImage(item.blob,2200);
-  const dest=document.createElement('canvas');dest.width=src.height;dest.height=src.width;
-  const context=dest.getContext('2d');context.translate(dest.width,0);context.rotate(Math.PI/2);context.drawImage(src,0,0);
-  const blob=await makeJpeg(dest),url=URL.createObjectURL(blob);
-  URL.revokeObjectURL(item.url);item.blob=blob;item.url=url;item.w=dest.width;item.h=dest.height;
-  src.width=src.height=dest.width=dest.height=1;renderPages();status('Página girada.');
+  item.rot=(item.rot+90)%360;           // el giro se aplica en el PDF: sin recomprimir la imagen
+  const old=item.thumb;item.thumb=await makeThumb(item.blob,item.rot);URL.revokeObjectURL(old);
+  renderPages();status('Página girada.');
 }
 function remove(index){
-  const [item]=documents.splice(index,1);if(item)URL.revokeObjectURL(item.url);renderPages();
+  const [item]=documents.splice(index,1);if(item)URL.revokeObjectURL(item.thumb);renderPages();
 }
 function reorder(from,to){
   if(from===to||from<0||to<0||from>=documents.length||to>=documents.length)return;
@@ -544,8 +487,8 @@ function renderPages(){
   if(!documents.length){const msg=document.createElement('div');msg.className='empty';msg.textContent='Tus páginas aparecerán aquí.';host.append(msg)}
   documents.forEach((item,i)=>{
     const card=document.createElement('div');card.className='scan-page';card.dataset.index=i;
-    const img=document.createElement('img');img.src=item.url;img.alt='Miniatura de página '+(i+1);card.append(img);
-    const meta=document.createElement('div');meta.className='page-meta';meta.textContent='Página '+(i+1);card.append(meta);
+    const img=document.createElement('img');img.src=item.thumb;img.alt='Miniatura de página '+(i+1);card.append(img);
+    const meta=document.createElement('div');meta.className='page-meta';meta.textContent='Página '+(i+1)+(item.std?' · '+item.std:'');card.append(meta);
     const actions=document.createElement('div');actions.className='page-actions';
     const handle=document.createElement('button');handle.className='drag-handle';handle.type='button';handle.textContent='↕ Mover';handle.style.touchAction='none';
     const turn=document.createElement('button');turn.type='button';turn.textContent='↻ Girar';turn.onclick=()=>rotate(i).catch(e=>status(e.message));
@@ -559,24 +502,44 @@ function renderPages(){
 }
 function cleanSession(){
   stopCamera();resetPhoto();queue=[];
-  for(const p of documents)URL.revokeObjectURL(p.url);
+  for(const p of documents)URL.revokeObjectURL(p.thumb);
   documents=[];drag=null;busy=false;directImportBusy=false;
   $('nativeScansInput').value='';$('galleryInput').value='';$('cameraFallback').value='';
   renderPages();
 }
+
+/* ───────── PDF ───────── */
+// Tamaño de hoja real en el PDF: A4, Carta, Oficio o Legal si la proporción coincide; si no, se ajusta a A4.
+function pageBox(item){
+  const portrait=item.h>=item.w,std=item.std&&PDF_SIZES[item.std];
+  if(std)return portrait?std:[std[1],std[0]];
+  const long=Math.max(item.w,item.h),short=Math.min(item.w,item.h);
+  const k=Math.min(841.89/long,595.28/short);
+  return[item.w*k,item.h*k];
+}
+function loadScript(src){
+  return new Promise((ok,fail)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>fail(Error('No se pudo cargar el motor PDF'));document.head.append(s)});
+}
+async function ensurePdfEngine(){
+  if(window.PDFLib)return true;
+  try{await loadScript('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js')}catch(_){}
+  return !!window.PDFLib;
+}
 $('exportBtn').onclick=async()=>{
   if(!documents.length)return;
   if(source||queue.length||busy||directImportBusy){status('Termina de preparar o importar todas las fotografías antes de generar el PDF.');return}
-  if(!window.PDFLib){status('Motor PDF no disponible. Comprueba tu conexión.');return}
   $('exportBtn').disabled=true;status('Generando PDF multipágina…');
+  if(!await ensurePdfEngine()){status('Motor PDF no disponible. Comprueba tu conexión.');$('exportBtn').disabled=false;return}
   try{
     const pdf=await PDFLib.PDFDocument.create();
+    pdf.setTitle('Escaneo GS Studio');pdf.setCreator('GS Studio');pdf.setProducer('GS Studio');
     for(const page of documents){
       const data=new Uint8Array(await page.blob.arrayBuffer());
       const img=await pdf.embedJpg(data);
-      const w=page.w,h=page.h,ratio=72/150;
-      const sheet=pdf.addPage([w*ratio,h*ratio]);
-      sheet.drawImage(img,{x:0,y:0,width:sheet.getWidth(),height:sheet.getHeight()});
+      const [pw,ph]=pageBox(page);
+      const sheet=pdf.addPage([pw,ph]);
+      sheet.drawImage(img,{x:0,y:0,width:pw,height:ph});
+      if(page.rot)sheet.setRotation(PDFLib.degrees(page.rot));
       await nextFrame();
     }
     const data=await pdf.save(),url=URL.createObjectURL(new Blob([data],{type:'application/pdf'}));
@@ -588,7 +551,7 @@ $('exportBtn').onclick=async()=>{
     status('Descarga iniciada. Se liberaron las imágenes de la sesión. Verifica el PDF descargado.');
   }catch(e){status('No se pudo generar el PDF: '+e.message);$('exportBtn').disabled=false}
 };
-addEventListener('pagehide',()=>{stopCamera();for(const p of documents)URL.revokeObjectURL(p.url)});
-addEventListener('resize',()=>{if(source)drawCorners()});
+addEventListener('pagehide',()=>{stopCamera();for(const p of documents)URL.revokeObjectURL(p.thumb)});
+addEventListener('resize',()=>{if(source&&!$('manualPanel').hidden)drawCorners()});
 renderPages();
 })();
