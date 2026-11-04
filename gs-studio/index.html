@@ -99,6 +99,14 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 .page.organize-page .image-card-toolbar button{border:1px solid #b6c9dc;background:white;border-radius:8px;font-size:18px;color:#245881;min-width:40px;min-height:40px;flex:1}
 .page.organize-page .image-card-toolbar button:focus-visible{outline:3px solid #ff6900;outline-offset:2px}
 .page.organize-page .page-move-hint{font-size:11px;color:#607990;margin-top:7px}
+.organize-selection-tools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0;padding:12px;border:1px solid #c5d3e0;border-radius:10px;background:#f4f8fc}
+.organize-selection-tools.hidden{display:none}
+.organize-selection-tools button{cursor:pointer;min-height:38px}
+#deleteSelectedPages{background:#aa2930;color:white;border:0;border-radius:7px;padding:9px 14px}
+#deleteSelectedPages:disabled{opacity:.5;cursor:not-allowed}
+.page-select-label{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13px;margin-bottom:8px;cursor:pointer}
+.page-select-label input{width:19px;height:19px;accent-color:#245881}
+.page.selected-page{border:2px solid #245881;background:#eaf3ff}
 </style><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/gs-studio/icons/pwa-192.png"><script defer src="/pwa-register.js"></script></head>
 <body><header><img class="brand-logo" src="./icons/studio-logo.svg" alt="GS Studio"><div><strong>GS Studio</strong><div class="subtitle">Centro de gestión documental - Gestión Social</div></div></header>
 <main><section class="hero"><div><span class="orange">GESTIÓN DOCUMENTAL</span><h1>Todos tus documentos en un solo lugar.</h1><p class="subtitle">Sin subir tus archivos a nuestros servidores. Conservamos los originales.</p></div></section>
@@ -142,6 +150,12 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 </div>
 </section>
 <div id="imageReorderHint" class="image-reorder-hint hidden"><strong>Organiza tus páginas:</strong> arrastra cualquier foto a otra posición. También puedes usar «Mover a posición» para listas largas. Gira cada imagen con las flechas ↶ ↷.</div>
+<div id="organizeSelectionTools" class="organize-selection-tools hidden" aria-label="Selección múltiple de páginas">
+  <strong id="selectedPagesCount" aria-live="polite">0 página(s) seleccionada(s)</strong>
+  <button id="selectAllPages" type="button" class="secondary">Seleccionar todas</button>
+  <button id="clearSelectedPages" type="button" class="secondary">Deseleccionar</button>
+  <button id="deleteSelectedPages" type="button" disabled>Eliminar seleccionadas</button>
+</div>
 <div id="pages" class="pages"></div>
 <div id="signTools" class="hidden"><p><label>Firma manuscrita visual</label> · elige cómo agregarla</p>
 <div class="toolbar signature-options"><button class="secondary" type="button" id="drawSignBtn">Dibujar firma</button><button class="secondary" type="button" id="uploadSignBtn">Cargar imagen</button><button class="secondary" type="button" id="cameraSignBtn">Tomar foto</button></div>
