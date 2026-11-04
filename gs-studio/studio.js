@@ -400,17 +400,24 @@
     if(!bar)return;
     bar.classList.toggle('hidden',tool!=='organize'||!pages.length);
     const count=pages.filter(p=>selectedPageIds.has(p.selectionId)).length;
-    $('selectedPagesCount').textContent=count+' página(s) seleccionada(s)';
-    $('deleteSelectedPages').disabled=!count;
-    $('selectAllPages').disabled=count===pages.length;
-    $('clearSelectedPages').disabled=!count;
+    const countLabel=$('selectedPagesCount');
+    const deleteBtn=$('deleteSelectedPages');
+    const selectAllBtn=$('selectAllPages');
+    const clearBtn=$('clearSelectedPages');
+    if(countLabel)countLabel.textContent=count+' página(s) seleccionada(s)';
+    if(deleteBtn)deleteBtn.disabled=!count;
+    if(selectAllBtn)selectAllBtn.disabled=count===pages.length;
+    if(clearBtn)clearBtn.disabled=!count;
   }
-  $('selectAllPages').addEventListener('click',()=>{
+  const selectAllPagesBtn=$('selectAllPages');
+  const clearSelectedPagesBtn=$('clearSelectedPages');
+  const deleteSelectedPagesBtn=$('deleteSelectedPages');
+  if(selectAllPagesBtn)selectAllPagesBtn.addEventListener('click',()=>{
     pages.forEach(p=>{p.selectionId??=nextPageId++;selectedPageIds.add(p.selectionId);});
     render();
   });
-  $('clearSelectedPages').addEventListener('click',()=>{selectedPageIds.clear();render();});
-  $('deleteSelectedPages').addEventListener('click',()=>{
+  if(clearSelectedPagesBtn)clearSelectedPagesBtn.addEventListener('click',()=>{selectedPageIds.clear();render();});
+  if(deleteSelectedPagesBtn)deleteSelectedPagesBtn.addEventListener('click',()=>{
     const count=pages.filter(p=>selectedPageIds.has(p.selectionId)).length;
     if(!count)return;
     if(!window.confirm('¿Eliminar '+count+' página(s) seleccionada(s) del PDF que vas a generar?'))return;
