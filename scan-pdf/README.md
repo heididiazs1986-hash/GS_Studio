@@ -4,7 +4,7 @@ Ruta: `/scan-pdf/`. Se accede desde la tarjeta «Escanear PDF» de GS Studio sol
 
 ## Flujo
 1. Abrir la cámara (con autorización expresa) o seleccionar fotografías del teléfono.
-2. **Detección en vivo** de la hoja: contorno naranja sobre la cámara. Con «Auto» activo, la foto se toma sola cuando la hoja queda quieta ≈1 s (el anillo del botón se va llenando). También se puede capturar con el botón. Si el teléfono lo permite aparece la linterna 🔦.
+2. **Detección en vivo** de la hoja: contorno naranja sobre la cámara. Con «Auto» activo, la foto se toma sola cuando la hoja queda quieta ≈0,7 s (el anillo del botón se va llenando). También se puede capturar con el botón. Si el teléfono lo permite aparece la linterna 🔦.
 3. Vista previa con el recorte y el acabado ya aplicados. Si no se detectaron bordes con claridad, se abre directamente el ajuste de esquinas (con **lupa** al arrastrar un punto).
 4. Acabado: **Auto** (quita sombras y deja el papel blanco), **Original**, **Grises**, **B/N** (texto negro limpio sobre blanco).
 5. «↻ Girar la hoja» si quedó de lado. Guardar la página y repetir para documentos multipágina.

@@ -188,12 +188,12 @@ function sample(L,w,h,x,y){ // bilineal; null si cae fuera de la imagen
   const x0=x|0,y0=y|0,x1=Math.min(w-1,x0+1),y1=Math.min(h-1,y0+1),fx=x-x0,fy=y-y0;
   return(L[y0*w+x0]*(1-fx)+L[y0*w+x1]*fx)*(1-fy)+(L[y1*w+x0]*(1-fx)+L[y1*w+x1]*fx)*fy;
 }
-/* ¿Cuánto del contorno propuesto es realmente un borde (papel más claro por dentro)? */
+/* ¿Cuánto del contorno propuesto tiene el papel más claro por dentro? */
 function edgeSupport(q,L,w,h){
   const sides=[];
   for(let i=0;i<4;i++){
     const A=q[i],B=q[(i+1)%4],dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1;
-    const nx=dy/len,ny=-dx/len,off=Math.max(2,Math.min(w,h)*.012);
+    const nx=dy/len,ny=-dx/len,off=Math.max(3,Math.min(w,h)*.022);
     let pass=0,total=0;
     for(let t=.1;t<=.9001;t+=.04){
       const cx=A.x+dx*t,cy=A.y+dy*t;
@@ -201,32 +201,94 @@ function edgeSupport(q,L,w,h){
       total++;
       if(inside===null)continue;
       if(outside===null){pass+=.5;continue}      // el borde coincide con el marco de la foto
-      if(inside-outside>=9)pass++;
+      let ok=inside-outside>=7;
+      if(!ok){ // bordes suaves (sombra o degradado): se mira también a más distancia
+        const i2=sample(L,w,h,cx-nx*off*2,cy-ny*off*2),o2=sample(L,w,h,cx+nx*off*2,cy+ny*off*2);
+        ok=i2!==null&&o2!==null&&i2-o2>=9;
+      }
+      if(ok)pass++;
     }
     sides.push(pass/total);
   }
   return{mean:sides.reduce((a,b)=>a+b,0)/4,min:Math.min(...sides)};
 }
-function evaluateQuad(q,hullArea,compArea,L,w,h){
-  const area=polyArea(q),frame=w*h,frac=area/frame;
-  if(area<=0||frac<.10||frac>.985)return null;
-  if(hullArea/area<.85)return null;                 // no es realmente un cuadrilátero
-  const solidity=compArea/hullArea;
-  if(solidity<.68)return null;
-  if(!isConvexQuad(q))return null;
-  if(cornerAngles(q).some(a=>a<48||a>132))return null;
+/* Mapa de bordes (Sobel): magnitud y orientación de cada píxel con borde claro. */
+function buildEdges(L,w,h){
+  const mag=new Float32Array(w*h),deg=new Int16Array(w*h).fill(-1),hist=new Uint32Array(256);
+  const ang=new Float32Array(w*h);
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const i=y*w+x;
+      const gx=(L[i-w+1]+2*L[i+1]+L[i+w+1])-(L[i-w-1]+2*L[i-1]+L[i+w-1]);
+      const gy=(L[i+w-1]+2*L[i+w]+L[i+w+1])-(L[i-w-1]+2*L[i-w]+L[i-w+1]);
+      const m=Math.hypot(gx,gy)/4;mag[i]=m;ang[i]=Math.atan2(gy,gx);hist[Math.min(255,m|0)]++;
+    }
+  }
+  const total=(w-2)*(h-2);let acc=0,p92=0;
+  for(let v=0;v<256;v++){acc+=hist[v];if(acc>=total*.92){p92=v;break}}
+  const T=clamp(p92*.35,4,11);
+  const pts=[];
+  for(let i=0;i<w*h;i++){
+    if(mag[i]>=T){
+      let d=(ang[i]*180/Math.PI)%180;if(d<0)d+=180;
+      deg[i]=Math.round(d)%180;pts.push(i);
+    }
+  }
+  return{mag,deg,ang,T,pts};
+}
+const angDiff180=(a,b)=>{const d=Math.abs(a-b)%180;return d>90?180-d:d};
+/* ¿Qué parte del contorno propuesto coincide con bordes reales y con la orientación correcta? */
+function coverage(q,ctx){
+  const {w,h,deg}=ctx,sides=[];
+  for(let i=0;i<4;i++){
+    const A=q[i],B=q[(i+1)%4],dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1;
+    let nd=(Math.atan2(-dx,dy)*180/Math.PI)%180;if(nd<0)nd+=180;
+    const steps=Math.max(8,Math.round(len/2));let hit=0,total=0;
+    for(let s=0;s<steps;s++){
+      const t=.04+.92*(s+.5)/steps,cx=Math.round(A.x+dx*t),cy=Math.round(A.y+dy*t);
+      total++;
+      let found=false;
+      for(let yy=Math.max(0,cy-2);yy<=Math.min(h-1,cy+2)&&!found;yy++)
+        for(let xx=Math.max(0,cx-2);xx<=Math.min(w-1,cx+2);xx++){
+          const d=deg[yy*w+xx];
+          if(d>=0&&angDiff180(d,nd)<=24){found=true;break}
+        }
+      if(found)hit++;
+    }
+    sides.push(hit/total);
+  }
+  return{mean:sides.reduce((a,b)=>a+b,0)/4,min:Math.min(...sides)};
+}
+/* Puntuación común para candidatos de cualquier origen (máscara de papel o líneas de borde). */
+function scoreQuad(ctx,q,opts){
+  const R=(why,x)=>{if(ctx.why)ctx.why.push(why+(x?':'+x:''));return null};
+  const {w,h,L}=ctx,area=polyArea(q),frac=area/(w*h);
+  if(area<=0||frac<.10||frac>.985)return R('frac',frac.toFixed(2));
+  if(!isConvexQuad(q))return R('convex');
+  if(cornerAngles(q).some(a=>a<45||a>135))return R('angles');
   const len=[dist(q[0],q[1]),dist(q[1],q[2]),dist(q[2],q[3]),dist(q[3],q[0])];
-  if(len[0]/len[2]>2.4||len[2]/len[0]>2.4||len[1]/len[3]>2.4||len[3]/len[1]>2.4)return null;
-  const sup=edgeSupport(q,L,w,h);
-  if(sup.mean<.55||sup.min<.28)return null;
+  if(len[0]/len[2]>2.6||len[2]/len[0]>2.6||len[1]/len[3]>2.6||len[3]/len[1]>2.6)return R('ratio');
+  let solidFactor=1;
+  if(opts.hullArea){
+    if(opts.hullArea/area<.82)return null;
+    const solidity=opts.compArea/opts.hullArea;
+    if(solidity<.62)return null;
+    solidFactor=Math.min(1,solidity/.9);
+  }
+  const bright=edgeSupport(q,L,w,h);
+  if(bright.mean<(opts.loose?.70:.5)||bright.min<(opts.loose?.55:.22))return R('bright',bright.mean.toFixed(2)+'/'+bright.min.toFixed(2));
+  const cov=coverage(q,ctx);
+  if(cov.mean<.45||cov.min<.22)return R('cov',cov.mean.toFixed(2)+'/'+cov.min.toFixed(2));
   const margin=Math.max(1.5,Math.min(w,h)*.01);
   let touching=0;
   for(const p of q)if(p.x<margin||p.y<margin||p.x>w-margin||p.y>h-margin)touching++;
   const touchFactor=[1,.92,.7,.2,.1][touching];
-  const score=Math.pow(sup.mean,1.5)*(.55+.45*Math.min(1,frac/.45))*Math.min(1,solidity/.9)*touchFactor;
-  return{score,support:sup.mean};
+  const quality=Math.sqrt(bright.mean*cov.mean);
+  return{score:Math.pow(quality,1.5)*(.55+.45*Math.min(1,frac/.45))*solidFactor*touchFactor,cov:cov.mean,bright:bright.mean};
 }
-function candidatesFromMask(mask,w,h,L,out){
+/* Candidatos por máscara: regiones claras conectadas → casco convexo → 4 vértices. */
+function candidatesFromMask(mask,ctx,out){
+  const {w,h}=ctx;
   const opened=morph(morph(mask,w,h,2,true),w,h,2,false);
   const {labels,areas}=labelComponents(opened,w,h);
   const minArea=w*h*.08;
@@ -251,8 +313,75 @@ function candidatesFromMask(mask,w,h,L,out){
     const quad=hullToQuad(hull);
     if(!quad||quad.length!==4)continue;
     const ordered=orderCorners(quad);
-    const res=evaluateQuad(ordered,Math.abs(polyArea(hull)),areas[id],L,w,h);
-    if(res)out.push({quad:ordered,score:res.score});
+    const res=scoreQuad(ctx,ordered,{hullArea:Math.abs(polyArea(hull)),compArea:areas[id]});
+    if(res)out.push({quad:ordered,score:res.score,source:'mask'});
+  }
+}
+/* Candidatos por líneas: transformada de Hough orientada sobre los bordes; se prueban
+ * combinaciones de dos pares de rectas casi paralelas. No depende de que el papel sea más claro. */
+function houghLines(ctx,maxLines){
+  const {w,h,ang,pts}=ctx,diag=Math.ceil(Math.hypot(w,h)),R=2*diag+1,NB=180;
+  const cosT=new Float32Array(NB+2),sinT=new Float32Array(NB+2);
+  for(let k=-1;k<=NB;k++){cosT[k+1]=Math.cos(k*Math.PI/NB);sinT[k+1]=Math.sin(k*Math.PI/NB)}
+  const acc=new Float32Array(NB*R);
+  for(const i of pts){
+    const x=i%w,y=(i/w)|0;
+    let a=ang[i]%Math.PI;if(a<0)a+=Math.PI;
+    const b=Math.round(a*NB/Math.PI);
+    for(let db=-1;db<=1;db++){
+      let k=b+db;
+      let rho=x*cosT[k+1]+y*sinT[k+1];
+      if(k<0){k+=NB;rho=-rho}else if(k>=NB){k-=NB;rho=-rho}
+      acc[k*R+Math.round(rho)+diag]+=db===0?1:.5;
+    }
+  }
+  const sm=new Float32Array(NB*R);
+  for(let k=0;k<NB;k++)for(let r=1;r<R-1;r++)sm[k*R+r]=acc[k*R+r-1]+acc[k*R+r]+acc[k*R+r+1];
+  const minVotes=Math.max(18,Math.min(w,h)*.1),lines=[];
+  for(let n=0;n<maxLines;n++){
+    let best=minVotes,bk=-1,br=-1;
+    for(let k=0;k<NB;k++){const o=k*R;for(let r=1;r<R-1;r++)if(sm[o+r]>best){best=sm[o+r];bk=k;br=r}}
+    if(bk<0)break;
+    lines.push({phi:bk*Math.PI/NB,rho:br-diag,votes:best});
+    for(let dk=-8;dk<=8;dk++){
+      let k=bk+dk,sign=1;
+      if(k<0){k+=NB;sign=-1}else if(k>=NB){k-=NB;sign=-1}
+      const rr=sign>0?br:2*diag-br;
+      for(let r=Math.max(1,rr-7);r<=Math.min(R-2,rr+7);r++)sm[k*R+r]=0;
+    }
+  }
+  return lines;
+}
+function lineGap(a,b){ // (diferencia de ángulo en rad, separación aproximada en px)
+  let dphi=b.phi-a.phi,rb=b.rho;
+  if(dphi>Math.PI/2){dphi-=Math.PI;rb=-rb}else if(dphi<-Math.PI/2){dphi+=Math.PI;rb=-rb}
+  return{dphi,gap:Math.abs(rb-a.rho)};
+}
+function intersect(a,b){
+  const det=Math.sin(b.phi-a.phi);
+  if(Math.abs(det)<.3)return null;
+  return{x:(a.rho*Math.sin(b.phi)-b.rho*Math.sin(a.phi))/det,y:(b.rho*Math.cos(a.phi)-a.rho*Math.cos(b.phi))/det};
+}
+function candidatesFromLines(ctx,out){
+  const {w,h}=ctx,lines=houghLines(ctx,26);
+  if(lines.length<4)return;
+  const minGap=Math.min(w,h)*.18,maxTilt=22*Math.PI/180,pairs=[];
+  for(let i=0;i<lines.length;i++)for(let j=i+1;j<lines.length;j++){
+    const g=lineGap(lines[i],lines[j]);
+    if(Math.abs(g.dphi)<=maxTilt&&g.gap>=minGap)pairs.push([i,j,(lines[i].phi+lines[j].phi)/2]);
+  }
+  const slack=.03;
+  for(let a=0;a<pairs.length;a++)for(let b=a+1;b<pairs.length;b++){
+    const P=pairs[a],Q=pairs[b];
+    if(P[0]===Q[0]||P[0]===Q[1]||P[1]===Q[0]||P[1]===Q[1])continue;
+    const cross=Math.abs(Math.sin(lines[P[0]].phi-lines[Q[0]].phi));
+    if(cross<.75)continue;               // los grupos deben ser casi perpendiculares (≥ ~49°)
+    const L1=lines[P[0]],L2=lines[P[1]],M1=lines[Q[0]],M2=lines[Q[1]];
+    const c=[intersect(L1,M1),intersect(L1,M2),intersect(L2,M2),intersect(L2,M1)];
+    if(c.some(p=>!p||p.x<-w*slack||p.x>w*(1+slack)||p.y<-h*slack||p.y>h*(1+slack)))continue;
+    const quad=orderCorners(c.map(p=>({x:clamp(p.x,0,w),y:clamp(p.y,0,h)})));
+    const res=scoreQuad(ctx,quad,{loose:true});
+    if(res)out.push({quad,score:res.score,source:'lines'});
   }
 }
 function detect(source,opts){
@@ -260,6 +389,8 @@ function detect(source,opts){
   try{
     const g=grab(source,opts.maxSide||300),{w,h}=g,n=w*h;
     const raw=luminance(g.data,n),L=boxBlur(raw,w,h,1);
+    const edges=buildEdges(L,w,h),ctx={L,w,h,deg:edges.deg,ang:edges.ang,pts:edges.pts};
+    if(opts.debug)ctx.why=[];
     // Saturación aproximada: el papel blanco casi no tiene color, una mesa de madera sí.
     const chroma=new Uint8Array(n);
     for(let i=0,j=0;i<n;i++,j+=4){
@@ -283,17 +414,29 @@ function detect(source,opts){
       for(let i=0;i<n;i++){
         if(L[i]>t){plain[i]=1;if(chroma[i]<chromaLimit)coloured[i]=1}
       }
-      candidatesFromMask(plain,w,h,L,found);
-      candidatesFromMask(coloured,w,h,L,found);
+      candidatesFromMask(plain,ctx,found);
+      candidatesFromMask(coloured,ctx,found);
     }
-    if(!found.length)return null;
+    candidatesFromLines(ctx,found);
+    if(!found.length)return opts.debug?{dbg:[],info:{why:ctx.why.slice(0,12),T:edges.T,pts:edges.pts.length,lines:houghLines(ctx,26).map(l=>[Math.round(l.phi*180/Math.PI),Math.round(l.rho),Math.round(l.votes)]),thr:unique}}:null;
     found.sort((a,b)=>b.score-a.score);
-    const best=found[0];
-    if(best.score<.2)return null;
+    let best=found[0];
+    if(best.source==='lines'){ // una región de papel bien formada pesa más que líneas sueltas
+      const m=found.find(f=>f.source==='mask');
+      if(m&&m.score>=.5){
+        const ra=polyArea(best.quad)/polyArea(m.quad);
+        // líneas que recortan una región de papel limpia (borde interno) o que abarcan mucho más
+        // que ella (estampado de la mesa) se descartan; si son parecidas, manda el puntaje
+        if(ra<.93||ra>1.35)best=m;
+      }
+    }
+    if(best.score<.2&&!opts.debug)return null;
     let corners=best.quad.map(p=>({x:clamp(p.x/w,0,1),y:clamp(p.y/h,0,1)}));
-    const confidence=clamp(best.score/.65,0,1);
+    let confidence=clamp(best.score/.65,0,1);
+    if(best.source==='lines'&&!found.some(f=>f.source==='mask'&&f.score>=.5))confidence=Math.min(confidence,.6);
     if(opts.refine)corners=refine(source,corners);
-    return{corners,confidence};
+    const dbg=opts.debug?found.slice(0,8).map(f=>({s:f.score,src:f.source,q:f.quad.map(p=>({x:p.x/w,y:p.y/h}))})):undefined;
+    return{corners,confidence,source:best.source,dbg};
   }catch(error){
     console.warn('GS Studio: detección no disponible',error);
     return null;

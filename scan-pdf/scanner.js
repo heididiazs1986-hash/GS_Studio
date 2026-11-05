@@ -13,7 +13,7 @@ const status=s=>{$('status').textContent=s};
 const crop=$('cropCanvas'),pen=crop.getContext('2d',{willReadFrequently:true});
 const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
 const defaultCorners=()=>[{x:.045,y:.045},{x:.955,y:.045},{x:.955,y:.955},{x:.045,y:.955}];
-const STABLE_TICKS=5;           // ≈1,2 s con la hoja quieta antes de la captura automática
+const STABLE_TICKS=3;           // ≈0,7 s con la hoja casi quieta antes de la captura automática
 const PDF_SIZES={A4:[595.28,841.89],Carta:[612,792],Oficio:[612,936],Legal:[612,1008]};
 
 let stream=null,imageCapture=null,torchOn=false,capturing=false;
@@ -104,9 +104,9 @@ function runLiveDetection(token){
         const moved=smoothed?Math.max(...found.corners.map((p,i)=>distance(p,smoothed[i]))):1;
         if(!smoothed||moved>.08)smoothed=found.corners.map(p=>({...p}));
         else smoothed=smoothed.map((p,i)=>({x:p.x*.5+found.corners[i].x*.5,y:p.y*.5+found.corners[i].y*.5}));
-        stableTicks=moved<.012?stableTicks+1:0;
+        stableTicks=moved<.022?stableTicks+1:0;
         liveCorners=smoothed.map(p=>({...p}));lastLiveAt=performance.now();
-        shown=smoothed;progress=autoCapture&&found.confidence>=.45?Math.min(1,stableTicks/STABLE_TICKS):0;
+        shown=smoothed;progress=autoCapture&&found.confidence>=.4?Math.min(1,stableTicks/STABLE_TICKS):0;
         if(progress>=1){updateCameraDetection(shown,1);capture();return}
       }else{smoothed=null;stableTicks=0;liveCorners=null;lastLiveAt=0}
       updateCameraDetection(shown,progress);
