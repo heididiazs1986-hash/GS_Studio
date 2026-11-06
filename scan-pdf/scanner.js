@@ -13,7 +13,8 @@ const status=s=>{$('status').textContent=s};
 const crop=$('cropCanvas'),pen=crop.getContext('2d',{willReadFrequently:true});
 const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
 const defaultCorners=()=>[{x:.045,y:.045},{x:.955,y:.045},{x:.955,y:.955},{x:.045,y:.955}];
-const STABLE_TICKS=3;           // ≈0,7 s con la hoja casi quieta antes de la captura automática
+const STABLE_TICKS=4;           // ≈1 s con la hoja casi quieta antes de la captura automática
+const STABLE_TICKS_CUT=12;      // si la hoja parece no caber completa, solo se captura sola tras ≈3 s quieta
 const PDF_SIZES={A4:[595.28,841.89],Carta:[612,792],Oficio:[612,936],Legal:[612,1008]};
 
 let stream=null,imageCapture=null,torchOn=false,capturing=false;
@@ -58,7 +59,7 @@ function cameraGuideCorners(){
   const panel=$('cameraPanel').getBoundingClientRect(),guide=document.querySelector('.camera-outline').getBoundingClientRect();
   const video=$('video'),vw=video.videoWidth,vh=video.videoHeight;
   if(!vw||!vh||!panel.width||!panel.height)return defaultCorners();
-  const factor=Math.max(panel.width/vw,panel.height/vh);
+  const factor=Math.min(panel.width/vw,panel.height/vh);
   const width=vw*factor,height=vh*factor,ox=(panel.width-width)/2,oy=(panel.height-height)/2;
   const x=x=>clamp(((x-panel.left)-ox)/width,0,1);
   const y=y=>clamp(((y-panel.top)-oy)/height,0,1);
@@ -73,7 +74,7 @@ function drawDetectedContour(found,progress){
   overlay.width=Math.round(w*ratio);overlay.height=Math.round(h*ratio);
   const ctx=overlay.getContext('2d');ctx.scale(ratio,ratio);
   if(!found||!video.videoWidth)return;
-  const factor=Math.max(w/video.videoWidth,h/video.videoHeight);
+  const factor=Math.min(w/video.videoWidth,h/video.videoHeight);
   const imgW=video.videoWidth*factor,imgH=video.videoHeight*factor;
   const ox=(w-imgW)/2,oy=(h-imgH)/2;
   const pts=found.map(p=>({x:ox+p.x*imgW,y:oy+p.y*imgH}));
@@ -82,8 +83,8 @@ function drawDetectedContour(found,progress){
   ctx.lineWidth=4;ctx.strokeStyle='#ff6900';ctx.shadowColor='#101b27';ctx.shadowBlur=8;ctx.stroke();ctx.shadowBlur=0;
   pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke()});
 }
-function updateCameraDetection(found,progress=0){
-  const message=found?(autoCapture?(progress>0?'Mantén firme…':'Hoja detectada'):'Hoja detectada · toca capturar'):'Centra la hoja completa en la pantalla';
+function updateCameraDetection(found,progress=0,cut=false){
+  const message=found?(cut?'Aléjate un poco: la hoja no cabe completa':autoCapture?(progress>0?'Mantén firme…':'Hoja detectada'):'Hoja detectada · toca capturar'):'Centra la hoja completa en la pantalla';
   if($('cameraHint').textContent!==message)$('cameraHint').textContent=message;
   $('cameraDetection').innerHTML=found?'Bordes<br>detectados':'Buscando<br>bordes…';
   document.querySelector('.camera-outline').classList.toggle('detected',!!found);
@@ -97,19 +98,21 @@ function runLiveDetection(token){
     if(token!==cameraDetectionToken||!stream||!video.videoWidth){clearTimeout(timer);return}
     let progress=0,shown=null;
     if(!document.hidden&&!capturing)try{
-      const result=Scan.detect(video,{maxSide:280});
-      const found=result&&result.confidence>=.3?result:null;
+      const result=Scan.detect(video,{maxSide:280,prefer:smoothed});
+      const found=result&&result.confidence>=.3?result:null,cut=!!(found&&found.cut&&found.cut.length);
       if(found){
         // Se promedian los cuadros para que el contorno no tiemble y se detecta cuándo la hoja se queda quieta.
         const moved=smoothed?Math.max(...found.corners.map((p,i)=>distance(p,smoothed[i]))):1;
         if(!smoothed||moved>.08)smoothed=found.corners.map(p=>({...p}));
         else smoothed=smoothed.map((p,i)=>({x:p.x*.5+found.corners[i].x*.5,y:p.y*.5+found.corners[i].y*.5}));
-        stableTicks=moved<.022?stableTicks+1:0;
+        stableTicks=moved<.03?stableTicks+1:0;
         liveCorners=smoothed.map(p=>({...p}));lastLiveAt=performance.now();
-        shown=smoothed;progress=autoCapture&&found.confidence>=.4?Math.min(1,stableTicks/STABLE_TICKS):0;
-        if(progress>=1){updateCameraDetection(shown,1);capture();return}
+        shown=smoothed;
+        const need=cut?STABLE_TICKS_CUT:STABLE_TICKS;
+        progress=autoCapture&&found.confidence>=.4?(cut&&stableTicks<need?0:Math.min(1,stableTicks/need)):0;
+        if(progress>=1){updateCameraDetection(shown,1,cut);capture();return}
       }else{smoothed=null;stableTicks=0;liveCorners=null;lastLiveAt=0}
-      updateCameraDetection(shown,progress);
+      updateCameraDetection(shown,progress,cut);
     }catch(e){console.warn('Detección en vivo:',e)}
     timer=setTimeout(tick,230);
   }
@@ -247,12 +250,20 @@ async function showNext(){
   const detected=findPaper(source);
   // Las esquinas de la guía o del video solo valen si la foto tiene el mismo encuadre que la imagen en vivo.
   const sameFraming=queued?.videoAspect&&Math.abs(source.width/source.height-queued.videoAspect)/queued.videoAspect<.03;
-  const fallback=detected?null:(sameFraming?(queued.liveCorners||queued.guideCorners):null);
-  automaticCrop=!!detected||!!queued?.liveCorners&&sameFraming&&!detected;
-  corners=detected||fallback||defaultCorners();
+  const live=sameFraming&&queued.liveCorners?Scan.refine(source,queued.liveCorners):null;
+  let chosen=detected;
+  if(live){
+    if(!detected)chosen=live;
+    // Si la detección sobre la foto completa abarca mucho más que lo que se veía en pantalla, probablemente
+    // juntó la hoja con otra vecina: se respeta el encuadre de la persona.
+    else if(Scan.polyIoU(live,detected)<.75&&Math.abs(Scan.polyArea(detected))>Math.abs(Scan.polyArea(live))*1.5)chosen=live;
+  }
+  const fallback=chosen?null:(sameFraming?queued.guideCorners:null);
+  automaticCrop=!!chosen;
+  corners=chosen||fallback||defaultCorners();
   setFilter('enhance',false);
   $('editPanel').hidden=false;
-  const uncertain=!detected&&!(sameFraming&&queued?.liveCorners);
+  const uncertain=!chosen;
   $('manualPanel').hidden=!uncertain;
   $('quadHint').textContent=uncertain?'No se vieron los bordes con claridad. Mueve los cuatro puntos a las esquinas de la hoja.':'Bordes detectados: revisa los cuatro puntos.';
   if(uncertain)drawCorners();
@@ -353,11 +364,12 @@ $('startCamera').onclick=async()=>{
   if(!navigator.mediaDevices?.getUserMedia){$('cameraFallback').click();status('Utiliza la cámara del celular para tomar la foto.');return}
   try{
     stopCamera();
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2160},height:{ideal:3840}}});
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9}}});
     const track=stream.getVideoTracks()[0],caps=track.getCapabilities?.()||{};
     $('video').srcObject=stream;await $('video').play();
     $('cameraPanel').hidden=false;$('startCamera').disabled=true;
     $('torchBtn').hidden=!caps.torch;
+    if(caps.zoom&&caps.zoom.min!=null)track.applyConstraints({advanced:[{zoom:caps.zoom.min}]}).catch(()=>{});   // sin zoom digital: se ve toda la escena
     if(caps.focusMode?.includes?.('continuous'))track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
     if(typeof ImageCapture==='function')try{imageCapture=new ImageCapture(track)}catch(_){imageCapture=null}
     $('autoBtn').classList.toggle('on',autoCapture);$('autoBtn').textContent=autoCapture?'Auto ✓':'Auto';
@@ -378,22 +390,30 @@ async function capture(){
   capturing=true;
   const live=liveCorners&&performance.now()-lastLiveAt<1600?liveCorners.map(p=>({...p})):null;
   const guide=cameraGuideCorners(),videoAspect=video.videoWidth/video.videoHeight;
+  // Lo que la persona ve en este instante: sirve para ubicar su encuadre dentro de la foto del sensor
+  // (que suele abarcar más escena que la vista previa) o como respaldo si no coinciden.
+  const frame=document.createElement('canvas');
+  frame.width=video.videoWidth;frame.height=video.videoHeight;
+  frame.getContext('2d').drawImage(video,0,0);
   let photo=null;
   // Si el navegador lo permite se usa la foto completa del sensor (mucho más nítida que un cuadro de video).
   if(imageCapture)try{
     photo=await Promise.race([imageCapture.takePhoto(),new Promise((_,fail)=>setTimeout(()=>fail(Error('tiempo agotado')),3500))]);
   }catch(_){photo=null}
-  if(!photo){
-    const temp=document.createElement('canvas');
-    temp.width=video.videoWidth;temp.height=video.videoHeight;
-    temp.getContext('2d').drawImage(video,0,0);
-    photo=await makeJpeg(temp,.93).catch(()=>null);
-    temp.width=temp.height=1;
-  }
   navigator.vibrate?.(25);
   stopCamera();
-  if(!photo){status('No fue posible capturar la foto.');return}
-  queue.push({file:photo,captured:true,liveCorners:live,guideCorners:guide,videoAspect});showNext();
+  let item={captured:true,liveCorners:live,guideCorners:guide,videoAspect};
+  if(photo)try{
+    const small=await canvasFromImage(photo,720),pa=small.width/small.height;
+    const reg=Scan.registerView(frame,small);
+    if(reg)item={captured:true,liveCorners:live&&Scan.mapToPhoto(reg,live),guideCorners:Scan.mapToPhoto(reg,guide),videoAspect:pa};
+    else if(Math.abs(pa-videoAspect)/videoAspect>=.03)photo=null;   // otro encuadre y sin coincidencia fiable: se usa el cuadro de video
+    small.width=small.height=1;
+  }catch(_){photo=null}
+  if(!photo){photo=await makeJpeg(frame,.93).catch(()=>null);item={captured:true,liveCorners:live,guideCorners:guide,videoAspect}}
+  frame.width=frame.height=1;
+  if(!photo){capturing=false;status('No fue posible capturar la foto.');return}
+  queue.push({file:photo,...item});showNext();
 }
 $('takePhoto').onclick=capture;
 function resetPhoto(){

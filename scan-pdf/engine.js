@@ -3,12 +3,14 @@
  * Sin dependencias ni descargas: todo corre en el propio teléfono, también sin conexión.
  *
  * API (window.GSScan):
- *   detect(source,{maxSide,refine})      -> {corners,confidence} | null   (esquinas normalizadas 0..1: TL,TR,BR,BL)
+ *   detect(source,{maxSide,refine,prefer}) -> {corners,confidence} | null   (esquinas normalizadas 0..1: TL,TR,BR,BL)
  *   refine(source,corners)               -> corners afinadas en alta resolución
  *   estimateSize(corners,w,h,limits)     -> {w,h,std}  tamaño de salida con la proporción real de la hoja
  *   warp(imageData,corners,w,h,opts)     -> canvas con la hoja enderezada
  *   enhance(canvas,mode,yieldFn)         -> acabado: 'enhance' | 'color' | 'gray' | 'bw'
  *   snapRatio(w,h)                       -> 'A4' | 'Carta' | 'Oficio' | 'Legal' | null
+ *   registerView(video,photo)            -> {x0,y0,w,h,score} | null   ubica el cuadro de video dentro de la foto
+ *   mapToPhoto(reg,corners) / polyIoU(a,b)
  */
 (function(root){
 'use strict';
@@ -384,6 +386,28 @@ function candidatesFromLines(ctx,out){
     if(res)out.push({quad,score:res.score,source:'lines'});
   }
 }
+
+/* ¿La hoja se sale del cuadro? Si junto a un lado del contorno que está cerca del marco de la imagen
+ * el papel sigue igual de claro por fuera, el borde es falso (línea de la tabla) o la hoja no cabe. */
+function cutSides(q,L,w,h){
+  const out=[];
+  for(let i=0;i<4;i++){
+    const A=q[i],B=q[(i+1)%4],dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1,nx=dy/len,ny=-dx/len;
+    const mx=(A.x+B.x)/2,my=(A.y+B.y)/2;
+    let room=0;while(room<w+h&&sample(L,w,h,mx+nx*(room+1),my+ny*(room+1))!==null)room++;
+    const lim=Math.min(room,Math.min(w,h)*.12);
+    if(room<3){out.push(i);continue}                   // el contorno toca el marco de la imagen
+    let si=0,so=0,n=0;
+    for(let t=.15;t<=.8501;t+=.14)for(const f of[.35,.7,1]){
+      const cx=A.x+dx*t,cy=A.y+dy*t,o=Math.max(2,lim*f);
+      const a=sample(L,w,h,cx-nx*o,cy-ny*o),b=sample(L,w,h,cx+nx*o,cy+ny*o);
+      if(a===null||b===null)continue;
+      si+=a;so+=b;n++;
+    }
+    if(n&&so>=si*.86)out.push(i);   // por fuera casi tan claro como por dentro: el papel sigue
+  }
+  return out;
+}
 function detect(source,opts){
   opts=opts||{};
   try{
@@ -419,6 +443,14 @@ function detect(source,opts){
     }
     candidatesFromLines(ctx,found);
     if(!found.length)return opts.debug?{dbg:[],info:{why:ctx.why.slice(0,12),T:edges.T,pts:edges.pts.length,lines:houghLines(ctx,26).map(l=>[Math.round(l.phi*180/Math.PI),Math.round(l.rho),Math.round(l.votes)]),thr:unique}}:null;
+    // Histéresis: en la cámara en vivo, el resultado anterior pesa un poco para que el contorno no salte
+    // entre candidatos casi empatados (p. ej. una línea interna de la tabla vs. el borde real del papel).
+    if(opts.prefer&&opts.prefer.length===4){
+      for(const f of found){
+        const d=Math.max(...f.quad.map((p,i)=>Math.hypot(p.x/w-opts.prefer[i].x,p.y/h-opts.prefer[i].y)));
+        if(d<.09)f.score*=1+.35*(1-d/.09);
+      }
+    }
     found.sort((a,b)=>b.score-a.score);
     let best=found[0];
     if(best.source==='lines'){ // una región de papel bien formada pesa más que líneas sueltas
@@ -436,7 +468,8 @@ function detect(source,opts){
     if(best.source==='lines'&&!found.some(f=>f.source==='mask'&&f.score>=.5))confidence=Math.min(confidence,.6);
     if(opts.refine)corners=refine(source,corners);
     const dbg=opts.debug?found.slice(0,8).map(f=>({s:f.score,src:f.source,q:f.quad.map(p=>({x:p.x/w,y:p.y/h}))})):undefined;
-    return{corners,confidence,source:best.source,dbg};
+    const cut=cutSides(best.quad,L,w,h);
+    return{corners,confidence,source:best.source,dbg,cut};
   }catch(error){
     console.warn('GS Studio: detección no disponible',error);
     return null;
@@ -705,5 +738,62 @@ async function enhance(canvas,mode,yieldFn){
   ctx.putImageData(img,0,0);
 }
 
-root.GSScan={detect,refine,estimateSize,warp,enhance,snapRatio,STANDARD,isConvexQuad,polyArea,orderCorners};
+
+/* ───────────── foto vs. vista previa ─────────────
+ * La foto del sensor suele abarcar más escena que el video de la vista previa. registerView ubica el
+ * cuadro de video dentro de la foto (escala + desplazamiento, correlación cruzada normalizada) para poder
+ * trasladar a la foto el contorno que la persona vio en pantalla. Devuelve null si no hay coincidencia fiable. */
+function toGray(src,W,H){
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,W,H);
+  const d=x.getImageData(0,0,W,H).data,g=new Float32Array(W*H);
+  for(let i=0,j=0;i<g.length;i++,j+=4)g[i]=d[j]*.299+d[j+1]*.587+d[j+2]*.114;
+  c.width=c.height=1;return g;
+}
+function registerView(view,photo,opts){
+  opts=opts||{};
+  try{
+    const vs=sourceSize(view),ps=sourceSize(photo);
+    if(!vs.w||!vs.h||!ps.w||!ps.h)return null;
+    const va=vs.w/vs.h,pa=ps.w/ps.h,W=opts.width||110,H=Math.max(8,Math.round(W/pa));
+    const P=toGray(photo,W,H),S1=new Float64Array((W+1)*(H+1)),S2=new Float64Array((W+1)*(H+1));
+    for(let y=0;y<H;y++){let r1=0,r2=0;for(let x=0;x<W;x++){const v=P[y*W+x];r1+=v;r2+=v*v;S1[(y+1)*(W+1)+x+1]=S1[y*(W+1)+x+1]+r1;S2[(y+1)*(W+1)+x+1]=S2[y*(W+1)+x+1]+r2}}
+    const win=(x,y,w,h)=>{const a=y*(W+1)+x,b=y*(W+1)+x+w,c=(y+h)*(W+1)+x,d=(y+h)*(W+1)+x+w,n=w*h;
+      const m=(S1[d]-S1[b]-S1[c]+S1[a])/n,v=(S2[d]-S2[b]-S2[c]+S2[a])/n-m*m;return Math.sqrt(Math.max(v,1e-6))};
+    const smax=Math.min(1.04,va/pa*1.04);
+    let best={score:-1};
+    const evalAt=(T,tw,th,ox,oy)=>{
+      let dot=0;
+      for(let j=0;j<th;j++){const po=(oy+j)*W+ox,to=j*tw;for(let i=0;i<tw;i++)dot+=T[to+i]*P[po+i]}
+      return dot/(win(ox,oy,tw,th)*tw*th);
+    };
+    for(let s=smax;s>=.28;s*=.93){
+      let tw=Math.min(W,Math.round(s*W)),th=Math.round(tw/va);
+      if(th>H){th=H;tw=Math.min(W,Math.round(th*va))}
+      if(tw<16||th<16)break;
+      const T=toGray(view,tw,th);let m=0;for(const v of T)m+=v;m/=T.length;
+      let sd=0;for(let i=0;i<T.length;i++){T[i]-=m;sd+=T[i]*T[i]}
+      sd=Math.sqrt(sd/T.length)||1;for(let i=0;i<T.length;i++)T[i]/=sd;
+      let loc={score:-1};
+      for(let oy=0;oy<=H-th;oy+=2)for(let ox=0;ox<=W-tw;ox+=2){const sc=evalAt(T,tw,th,ox,oy);if(sc>loc.score)loc={score:sc,ox,oy}}
+      if(loc.score<0)continue;
+      for(let oy=Math.max(0,loc.oy-2);oy<=Math.min(H-th,loc.oy+2);oy++)for(let ox=Math.max(0,loc.ox-2);ox<=Math.min(W-tw,loc.ox+2);ox++){const sc=evalAt(T,tw,th,ox,oy);if(sc>loc.score)loc={score:sc,ox,oy}}
+      if(loc.score>best.score)best={score:loc.score,ox:loc.ox,oy:loc.oy,tw,th};
+    }
+    if(best.score<(opts.minScore||.5))return null;
+    return{score:best.score,x0:best.ox/W,y0:best.oy/H,w:best.tw/W,h:best.th/H,
+      identity:Math.abs(best.tw/W-1)<.03&&Math.abs(best.th/H-1)<.03};
+  }catch(error){console.warn('GS Studio: no se pudo ubicar la vista previa en la foto',error);return null}
+}
+const mapToPhoto=(reg,pts)=>pts.map(p=>({x:clamp(reg.x0+p.x*reg.w,0,1),y:clamp(reg.y0+p.y*reg.h,0,1)}));
+/* Qué tanto se parecen dos contornos (0..1), comparados sobre una cuadrícula. */
+function polyIoU(a,b,n){
+  n=n||64;
+  const inside=(q,x,y)=>{let sign=0;for(let i=0;i<4;i++){const A=q[i],B=q[(i+1)%4],c=(B.x-A.x)*(y-A.y)-(B.y-A.y)*(x-A.x);if(c!==0){const sg=c>0?1:-1;if(sign&&sg!==sign)return false;sign=sg}}return true};
+  let i1=0,u=0;
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){const px=(x+.5)/n,py=(y+.5)/n,A=inside(a,px,py),B=inside(b,px,py);if(A&&B)i1++;if(A||B)u++}
+  return u?i1/u:0;
+}
+
+root.GSScan={detect,refine,estimateSize,warp,enhance,snapRatio,STANDARD,isConvexQuad,polyArea,orderCorners,registerView,mapToPhoto,polyIoU};
 })(window);
