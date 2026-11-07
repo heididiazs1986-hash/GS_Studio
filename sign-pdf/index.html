@@ -101,7 +101,7 @@ label{font-weight:650}
 <section id="imageSection" hidden><div class="upload-pad"><label id="imageLabel" for="signatureFile">Seleccionar fotografía o imagen de firma</label><input id="signatureFile" type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png"><input id="photoFile" type="file" accept="image/*" capture="environment"></div>
 <p class="hint">Arrastra sobre la foto para definir el recorte. Se intentará detectar el área con tinta automáticamente.</p>
 <canvas id="processCanvas" width="700" height="190" hidden></canvas>
-<div id="imageControls" hidden><label><input id="transparentBg" type="checkbox" checked> Quitar fondo claro</label><label>Sensibilidad <input id="whiteSensitivity" type="range" min="15" max="85" value="38"></label><button id="autoCrop" type="button">Recorte automático</button></div></section>
+<div id="imageControls" hidden><label><input id="transparentBg" type="checkbox" checked> Quitar fondo (deja solo la tinta)</label><label>Sensibilidad <input id="whiteSensitivity" type="range" min="15" max="85" value="38"></label><button id="autoCrop" type="button">Recorte automático</button></div></section>
 <div class="hint" style="font-weight:750;margin:13px 0 5px">Vista previa de la firma</div>
 <img id="signaturePreview" alt="Vista previa de firma">
 <div class="modal-actions"><button id="cancelModal" type="button">Cancelar</button><button id="applySignature" class="primary" type="button">Usar esta firma</button></div>
@@ -109,5 +109,6 @@ label{font-weight:650}
 </div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-<script src="./sign.js"></script>
+<script src="./firma-limpia.js?v=1"></script>
+<script src="./sign.js?v=2"></script>
 </body></html>

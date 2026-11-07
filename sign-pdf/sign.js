@@ -7,12 +7,12 @@ const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const sheet=$('sheet'),layer=$('stampLayer'),viewer=$('viewer');
 let original=null,viewDoc=null,documentName='',currentPage=0,zoom=1,renderTicket=0;
 let stamps=[],selectedId=null,nextId=1,placing=false,asset=null,signatureMode='draw',stageFile=null;
-let drawActive=false,cropSource=null,cropBox=null,cropGesture=null,signatureInk=false;
+let drawActive=false,cropSource=null,cleanSource=null,cleanTimer=0,cropBox=null,cropGesture=null,signatureInk=false;
 let observer=null,thumbTickets=new Map();
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const draw=$('drawPad'),pen=draw.getContext('2d',{willReadFrequently:true});
 pen.strokeStyle='#163d66';pen.lineWidth=4;pen.lineJoin='round';pen.lineCap='round';
-function releaseSignatureCandidate(){cropSource=null;cropBox=null;stageFile=null;$('processCanvas').width=1;$('processCanvas').height=1}
+function releaseSignatureCandidate(){cropSource=null;cleanSource=null;cropBox=null;stageFile=null;$('processCanvas').width=1;$('processCanvas').height=1}
 function resetAll(){
   original=null;const previous=viewDoc;viewDoc=null;previous?.destroy()?.catch?.(()=>{});
   documentName='';currentPage=0;zoom=1;renderTicket++;
@@ -264,9 +264,23 @@ function boundsOfInk(canvas,useAlpha=true){
   return{x:clamp(minX-pad,0,canvas.width-1),y:clamp(minY-pad,0,canvas.height-1),
     w:Math.min(canvas.width,Math.max(1,maxX-minX+pad*2)),h:Math.min(canvas.height,Math.max(1,maxY-minY+pad*2))};
 }
+// Quita el fondo del papel y deja solo la tinta (misma limpieza que GS Docs); null si no hay tinta clara
+function cleanedFrom(canvas){
+  try{return globalThis.GS_FIRMA?globalThis.GS_FIRMA.clean(canvas,{asCanvas:true,bias:(Number($('whiteSensitivity').value)-38)/47}):Promise.resolve(null)}
+  catch(_){return Promise.resolve(null)}
+}
+function refreshCleanSource(){
+  clearTimeout(cleanTimer);
+  cleanTimer=setTimeout(async()=>{
+    if(!cropSource)return;const base=cropSource;
+    const out=await cleanedFrom(base).catch(()=>null);
+    if(base!==cropSource)return;cleanSource=out;previewCandidate();
+  },140);
+}
 function cropCanvas(source,rect,removeWhite=false){
   const crop=document.createElement('canvas');crop.width=Math.max(1,Math.round(rect.w));crop.height=Math.max(1,Math.round(rect.h));
   const ctx=crop.getContext('2d',{willReadFrequently:true});
+  if(removeWhite&&source===cropSource&&cleanSource){ctx.drawImage(cleanSource,rect.x,rect.y,rect.w,rect.h,0,0,crop.width,crop.height);return crop}
   ctx.drawImage(source,rect.x,rect.y,rect.w,rect.h,0,0,crop.width,crop.height);
   if(removeWhite){
     const pixels=ctx.getImageData(0,0,crop.width,crop.height),data=pixels.data,tolerance=Number($('whiteSensitivity').value);
@@ -308,7 +322,8 @@ async function openImage(file){
     cropSource.width=Math.max(1,Math.round(image.naturalWidth*factor));
     cropSource.height=Math.max(1,Math.round(image.naturalHeight*factor));
     cropSource.getContext('2d',{willReadFrequently:true}).drawImage(image,0,0,cropSource.width,cropSource.height);
-    cropBox=boundsOfInk(cropSource,false)||{x:0,y:0,w:cropSource.width,h:cropSource.height};
+    cleanSource=await cleanedFrom(cropSource).catch(()=>null);
+    cropBox=(cleanSource?boundsOfInk(cleanSource,true):boundsOfInk(cropSource,false))||{x:0,y:0,w:cropSource.width,h:cropSource.height};
     $('processCanvas').hidden=false;$('imageControls').hidden=false;
     paintImageCrop();previewCandidate();note('Ajusta el rectángulo de recorte si hace falta y confirma la firma.');
   }catch(e){note(e.message)}
@@ -369,10 +384,10 @@ $('processCanvas').addEventListener('pointermove',e=>{
 });
 for(const n of ['pointerup','pointercancel'])$('processCanvas').addEventListener(n,()=>{if(cropGesture){cropGesture=null;previewCandidate()}});
 $('transparentBg').onchange=previewCandidate;
-$('whiteSensitivity').oninput=previewCandidate;
+$('whiteSensitivity').oninput=()=>{previewCandidate();refreshCleanSource()};
 $('autoCrop').onclick=()=>{
   if(!cropSource)return;
-  cropBox=boundsOfInk(cropSource,false)||{x:0,y:0,w:cropSource.width,h:cropSource.height};
+  cropBox=(cleanSource?boundsOfInk(cleanSource,true):boundsOfInk(cropSource,false))||{x:0,y:0,w:cropSource.width,h:cropSource.height};
   paintImageCrop();previewCandidate();
 };
 $('applySignature').onclick=()=>{
