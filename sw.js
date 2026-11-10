@@ -1,5 +1,5 @@
 /* GS Studio PWA: public shell only; never caches personal PDFs, photos or uploads. */
-const VERSION='gs-studio-shell-v1';
+const VERSION='gs-studio-shell-v2';
 const PUBLIC_ASSETS=['/offline.html','/gs-studio/icons/pwa-192.png','/gs-studio/icons/pwa-512.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(VERSION).then(cache=>cache.addAll(PUBLIC_ASSETS)).then(()=>self.skipWaiting()));
