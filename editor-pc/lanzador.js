@@ -20,16 +20,16 @@
 
   const css = `
   #gsLz{position:fixed;z-index:2147482000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-  #gsLz{width:70px;height:140px;touch-action:none;cursor:grab}
-  #gsLz .s{position:absolute;top:0;width:70px;height:140px;background:rgba(121,209,255,.62);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);border:1.5px solid rgba(121,209,255,.95);box-sizing:border-box;transition:background .15s}
-  #gsLz.l .s{left:0;border-radius:0 70px 70px 0;border-left:0}
-  #gsLz.r .s{right:0;border-radius:70px 0 0 70px;border-right:0}
-  #gsLz.o .s,#gsLz:hover .s{background:rgba(121,209,255,.8)}
-  #gsLz .b{position:absolute;top:35px;width:68px;height:68px;border-radius:20px;border:3px solid #ff6600;background:rgba(254,254,255,.94);padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,60,110,.28);touch-action:none;transition:transform .15s}
-  #gsLz.l .b{left:8px}#gsLz.r .b{right:8px}
-  #gsLz .b:hover,#gsLz.o .b{transform:scale(1.06)}
-  #gsLz .b span.t{font:900 26px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#0b4f7a}
-  #gsLz .b span.t i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff6600;margin-left:1px}
+  #gsLz{width:var(--w);height:var(--h);touch-action:none;cursor:grab}
+  #gsLz .s{position:absolute;top:0;width:var(--w);height:var(--h);background:rgba(121,209,255,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);border:2px solid rgba(121,209,255,.95);box-sizing:border-box;transition:background .15s}
+  #gsLz.l .s{left:0;border-radius:0 var(--h) var(--h) 0;border-left:0}
+  #gsLz.r .s{right:0;border-radius:var(--h) 0 0 var(--h);border-right:0}
+  #gsLz.o .s,#gsLz:hover .s{background:rgba(121,209,255,.78)}
+  #gsLz .b{position:absolute;top:calc((var(--h) - var(--bs)) / 2);width:var(--bs);height:var(--bs);border-radius:calc(var(--bs) * .29);border:calc(var(--bs) * .05) solid #ff6600;background:rgba(254,254,255,.95);padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,60,110,.3);touch-action:none;transition:transform .15s}
+  #gsLz.l .b{left:calc(var(--w) * .1)}#gsLz.r .b{right:calc(var(--w) * .1)}
+  #gsLz .b:hover,#gsLz.o .b{transform:scale(1.05)}
+  #gsLz .b span.t{font:900 calc(var(--bs) * .38)/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#0b4f7a}
+  #gsLz .b span.t i{display:inline-block;width:calc(var(--bs) * .1);height:calc(var(--bs) * .1);border-radius:50%;background:#ff6600;margin-left:1px}
   #gsLz .m{position:absolute;width:min(300px,86vw);background:#fff;color:#14181d;border-radius:20px;box-shadow:0 16px 44px rgba(10,14,18,.4);padding:12px;display:none;overflow:hidden}
   #gsLz .m:before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,#79d1ff,#ff6600)}
   #gsLz.o .m{display:block;animation:gsLzIn .14s ease-out}
@@ -50,8 +50,11 @@
     if (ss.get() === '1' || document.getElementById('gsLz')) return;
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     const root = document.createElement('div'); root.id = 'gsLz';
-    let pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos2') || ''); } catch (_) { return null; } })() || { side: 'l', y: Math.round(innerHeight * .5) };
-    const H = 140, W = 70;
+    let pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos2') || ''); } catch (_) { return null; } })() || { side: 'l', y: -1 };
+    const big = Math.min(innerWidth, innerHeight) >= 600 && isPC;           /* PC: grande; celular: proporcional */
+    const W = big ? 200 : Math.min(120, Math.round(innerWidth * .3)), H = big ? Math.min(440, Math.round(innerHeight * .6)) : Math.min(230, Math.round(innerHeight * .32)), BS = big ? 120 : Math.round(W * .66);
+    root.style.setProperty('--w', W + 'px'); root.style.setProperty('--h', H + 'px'); root.style.setProperty('--bs', BS + 'px');
+    if (pos.y < 0) pos.y = (innerHeight - H) / 2;
     const clampY = y => Math.min(Math.max(0, y), innerHeight - H);
     const place = () => { pos.y = clampY(pos.y); root.className = pos.side === 'r' ? 'r' : 'l'; if (root.classList.contains('o')) root.classList.add('o'); root.style.top = pos.y + 'px'; root.style.left = pos.side === 'r' ? 'auto' : '0'; root.style.right = pos.side === 'r' ? '0' : 'auto'; };
     const sh = document.createElement('div'); sh.className = 's';
