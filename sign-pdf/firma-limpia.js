@@ -89,13 +89,13 @@
           for(let dx=-1;dx<=1;dx++){const xx=pxx+dx;if(xx<0||xx>=W)continue;const q=yy*W+xx;if(mask[q]&&!label[q]){label[q]=nl;stack[sp++]=q}}}}
       comps[nl]={area,x0,y0,x1,y1};
     }
-    const drop=new Uint8Array(nl+1); let kept=0, keptArea=0;
+    const drop=new Uint8Array(nl+1); let kept=0, keptArea=0; const isLine=new Uint8Array(nl+1);
     const minArea=Math.max(10,Math.round(N*.00004));
     for(let l=1;l<=nl;l++){
       const c=comps[l],cw=c.x1-c.x0+1,ch=c.y1-c.y0+1,fill=c.area/(cw*ch);
       const touches=(c.x0<=1)+(c.y0<=1)+(c.x1>=W-2)+(c.y1>=H-2);
       let bad=c.area<minArea;
-      if(!bad&&cw>W*.40&&ch<H*.025&&fill>.5) bad=true;                        // renglón largo
+      if(!bad&&cw>W*.40&&ch<H*.025&&fill>.5){bad=true;isLine[l]=1}                        // renglón largo
       if(!bad&&touches>=1&&(cw>W*.9||ch>H*.9)&&fill<.18) bad=true;            // borde de la hoja / sombra
       if(!bad&&touches>=2&&fill<.25&&c.area>N*.01) bad=true;                  // marco
       if(bad)drop[l]=1; else {kept++;keptArea+=c.area}
@@ -109,6 +109,11 @@
       for(let l=1;l<=nl;l++){const c=comps[l]; if(drop[l]||c.area>=maxA*.12)continue;
         const cx2=(c.x0+c.x1)/2,cy2=(c.y0+c.y1)/2;
         if(c.area<N*.00012&&(cx2<bx0||cx2>bx1||cy2<by0||cy2>by1)){drop[l]=1;kept--;keptArea-=c.area}}
+    }
+    // salvaguarda: si los filtros quitaran más de un tercio de la tinta, es que se llevaron parte de la firma; solo se mantienen los renglones largos
+    {
+      let tot=0,dr=0; for(let l=1;l<=nl;l++){tot+=comps[l].area; if(drop[l]) dr+=comps[l].area}
+      if(tot>0&&dr>tot*.34){ for(let l=1;l<=nl;l++){ if(drop[l]&&!isLine[l]&&comps[l].area>=Math.max(6,N*.00002)){drop[l]=0;kept++;keptArea+=comps[l].area} } }
     }
     for(let i=0;i<N;i++){
       if(label[i]&&drop[label[i]]) {alpha[i]=0;continue}
