@@ -20,16 +20,24 @@
 
   const css = `
   #gsLz{position:fixed;z-index:2147482000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-  #gsLz .b{width:44px;height:44px;border-radius:50%;border:2px solid #fff;background:#ff6600;color:#fff;font:800 15px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.3);cursor:grab;touch-action:none;padding:0;opacity:.88}
-  #gsLz .b:hover,#gsLz.o .b{opacity:1}
-  #gsLz .m{position:absolute;min-width:236px;max-width:86vw;background:#fff;color:#14181d;border-radius:16px;box-shadow:0 10px 36px rgba(0,0,0,.35);border-top:4px solid #ff6600;padding:8px;display:none}
-  #gsLz.o .m{display:block}
-  #gsLz .h{padding:6px 8px 8px;font:800 13px system-ui,sans-serif;color:#5b6773;display:flex;justify-content:space-between;align-items:center}
-  #gsLz .h button{border:0;background:transparent;color:#5b6773;font-size:12px;cursor:pointer;text-decoration:underline;padding:2px}
-  #gsLz a{display:flex;align-items:center;gap:10px;padding:10px;border-radius:11px;color:#14181d;text-decoration:none;font:700 14px system-ui,sans-serif}
-  #gsLz a:hover,#gsLz a:focus{background:#fff2e8;outline:0}
-  #gsLz a.c{background:#f1f4f7;color:#5b6773;pointer-events:none}
-  #gsLz a small{margin-left:auto;font-weight:600;font-size:11px;color:#9aa5b1}
+  #gsLz .b{width:50px;height:50px;border-radius:16px;border:0;background:linear-gradient(145deg,#fff,#fff4ec);box-shadow:0 0 0 2px #ff6600,0 8px 22px rgba(255,102,0,.35),0 2px 6px rgba(0,0,0,.18);cursor:grab;touch-action:none;padding:0;opacity:.94;display:flex;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s}
+  #gsLz .b:hover,#gsLz.o .b{opacity:1;transform:scale(1.06)}
+  #gsLz .b span{font:900 19px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#14181d}
+  #gsLz .b span i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff6600;margin-left:1px}
+  #gsLz .m{position:absolute;width:min(300px,86vw);background:#fff;color:#14181d;border-radius:20px;box-shadow:0 16px 44px rgba(10,14,18,.4);padding:12px;display:none;overflow:hidden}
+  #gsLz .m:before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,#ff6600,#ff9a4d)}
+  #gsLz.o .m{display:block;animation:gsLzIn .14s ease-out}
+  @keyframes gsLzIn{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
+  #gsLz .h{padding:4px 4px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  #gsLz .h b{font:800 14px system-ui,sans-serif;color:#14181d}
+  #gsLz .h small{display:block;font:600 11px system-ui,sans-serif;color:#7b8794;margin-top:1px}
+  #gsLz .h button{border:0;background:#eef1f4;color:#5b6773;font:700 11px system-ui,sans-serif;cursor:pointer;border-radius:99px;padding:6px 10px;white-space:nowrap}
+  #gsLz .g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  #gsLz a{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:11px;border-radius:14px;background:#f6f8fa;border:1px solid #e6eaee;color:#14181d;text-decoration:none;font:700 13px/1.2 system-ui,sans-serif;position:relative;transition:background .12s,border-color .12s,transform .12s}
+  #gsLz a span{font-size:22px;line-height:1}
+  #gsLz a:hover,#gsLz a:focus{background:#fff2e8;border-color:#ff9a4d;transform:translateY(-1px);outline:0}
+  #gsLz a.c{background:#ff6600;border-color:#ff6600;color:#fff;pointer-events:none}
+  #gsLz a small{font-weight:700;font-size:10px;opacity:.85}
   @media print{#gsLz{display:none!important}}`;
 
   function build() {
@@ -38,11 +46,11 @@
     const root = document.createElement('div'); root.id = 'gsLz';
     const pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos') || ''); } catch (_) { return null; } })() || { x: 6, y: Math.round(innerHeight * .55) };
     const place = () => { const x = Math.min(Math.max(0, pos.x), innerWidth - 44), y = Math.min(Math.max(0, pos.y), innerHeight - 44); root.style.left = x + 'px'; root.style.top = y + 'px'; return { x, y }; };
-    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'b'; btn.textContent = 'GS'; btn.setAttribute('aria-label', 'Abrir otras apps de la suite GS'); btn.setAttribute('aria-expanded', 'false');
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'b'; btn.innerHTML = '<span>GS<i></i></span>'; btn.setAttribute('aria-label', 'Abrir otras apps de la suite GS'); btn.setAttribute('aria-expanded', 'false');
     const menu = document.createElement('div'); menu.className = 'm'; menu.setAttribute('role', 'menu');
     const apps = APPS.filter(a => !a.pc || isPC);
-    menu.innerHTML = '<div class="h"><span>Suite GS · abrir en ventana nueva</span><button type="button" data-hide>Ocultar por ahora</button></div>' +
-      apps.map(a => `<a role="menuitem" href="${a.u}" target="_blank" rel="noopener"${cur && cur.id === a.id ? ' class="c"' : ''}><span>${a.i}</span>${a.n}${cur && cur.id === a.id ? '<small>estás aquí</small>' : ''}</a>`).join('') ;
+    menu.innerHTML = '<div class="h"><div><b>Suite GS</b><small>Se abre en ventana nueva</small></div><button type="button" data-hide>Ocultar</button></div><div class="g">' +
+      apps.map(a => `<a role="menuitem" href="${a.u}" target="_blank" rel="noopener"${cur && cur.id === a.id ? ' class="c"' : ''}><span>${a.i}</span>${a.n}${cur && cur.id === a.id ? '<small>Estás aquí</small>' : ''}</a>`).join('') + '</div>';
     root.append(btn, menu); document.body.appendChild(root); place();
     const close = () => { root.classList.remove('o'); btn.setAttribute('aria-expanded', 'false'); };
     const open = () => {
