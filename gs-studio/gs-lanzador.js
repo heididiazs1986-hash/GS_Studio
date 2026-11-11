@@ -20,16 +20,18 @@
 
   const css = `
   #gsLz{position:fixed;z-index:2147482000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-  #gsLz{width:var(--w);height:var(--h);touch-action:none;cursor:grab}
-  #gsLz .s{position:absolute;top:0;width:var(--w);height:var(--h);background:rgba(121,209,255,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);border:2px solid rgba(121,209,255,.95);box-sizing:border-box;transition:background .15s}
-  #gsLz.l .s{left:0;border-radius:0 var(--h) var(--h) 0;border-left:0}
-  #gsLz.r .s{right:0;border-radius:var(--h) 0 0 var(--h);border-right:0}
-  #gsLz.o .s,#gsLz:hover .s{background:rgba(121,209,255,.78)}
-  #gsLz .b{position:absolute;top:calc((var(--h) - var(--bs)) / 2);width:var(--bs);height:var(--bs);border-radius:calc(var(--bs) * .29);border:calc(var(--bs) * .05) solid #ff6600;background:rgba(254,254,255,.95);padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,60,110,.3);touch-action:none;transition:transform .15s}
-  #gsLz.l .b{left:calc(var(--w) * .1)}#gsLz.r .b{right:calc(var(--w) * .1)}
-  #gsLz .b:hover,#gsLz.o .b{transform:scale(1.05)}
-  #gsLz .b span.t{font:900 calc(var(--bs) * .38)/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#0b4f7a}
-  #gsLz .b span.t i{display:inline-block;width:calc(var(--bs) * .1);height:calc(var(--bs) * .1);border-radius:50%;background:#ff6600;margin-left:1px}
+  #gsLz{width:76px;height:76px;touch-action:none;cursor:grab}
+  #gsLz:before,#gsLz:after{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(121,209,255,.55);animation:gsLzWave 2.8s ease-out infinite;pointer-events:none}
+  #gsLz:after{animation-delay:1.4s}
+  @keyframes gsLzWave{0%{transform:scale(1);opacity:.65}100%{transform:scale(2.1);opacity:0}}
+  @keyframes gsLzBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+  #gsLz .s{position:absolute;inset:0;border-radius:50%;background:rgba(121,209,255,.72);border:2px solid rgba(255,255,255,.75);box-shadow:0 6px 18px rgba(30,140,210,.35);animation:gsLzBeat 2.8s ease-in-out infinite}
+  #gsLz.o:before,#gsLz.o:after{animation-play-state:paused;opacity:0}
+  #gsLz .b{position:absolute;left:11px;top:11px;width:54px;height:54px;border-radius:17px;border:3px solid #ff6600;background:rgba(254,254,255,.96);padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,60,110,.3);touch-action:none;transition:transform .15s}
+  #gsLz .b:hover,#gsLz.o .b{transform:scale(1.06)}
+  #gsLz .b span.t{font:900 20px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#0b4f7a}
+  #gsLz .b span.t i{display:inline-block;width:5px;height:5px;border-radius:50%;background:#ff6600;margin-left:1px}
+  @media (prefers-reduced-motion:reduce){#gsLz:before,#gsLz:after,#gsLz .s{animation:none}#gsLz:before,#gsLz:after{display:none}}
   #gsLz .m{position:absolute;width:min(300px,86vw);background:#fff;color:#14181d;border-radius:20px;box-shadow:0 16px 44px rgba(10,14,18,.4);padding:12px;display:none;overflow:hidden}
   #gsLz .m:before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,#79d1ff,#ff6600)}
   #gsLz.o .m{display:block;animation:gsLzIn .14s ease-out}
@@ -50,13 +52,10 @@
     if (ss.get() === '1' || document.getElementById('gsLz')) return;
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     const root = document.createElement('div'); root.id = 'gsLz';
-    let pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos2') || ''); } catch (_) { return null; } })() || { side: 'l', y: -1 };
-    const big = Math.min(innerWidth, innerHeight) >= 600 && isPC;           /* PC: grande; celular: proporcional */
-    const W = big ? 200 : Math.min(120, Math.round(innerWidth * .3)), H = big ? Math.min(440, Math.round(innerHeight * .6)) : Math.min(230, Math.round(innerHeight * .32)), BS = big ? 120 : Math.round(W * .66);
-    root.style.setProperty('--w', W + 'px'); root.style.setProperty('--h', H + 'px'); root.style.setProperty('--bs', BS + 'px');
-    if (pos.y < 0) pos.y = (innerHeight - H) / 2;
-    const clampY = y => Math.min(Math.max(0, y), innerHeight - H);
-    const place = () => { pos.y = clampY(pos.y); root.className = pos.side === 'r' ? 'r' : 'l'; if (root.classList.contains('o')) root.classList.add('o'); root.style.top = pos.y + 'px'; root.style.left = pos.side === 'r' ? 'auto' : '0'; root.style.right = pos.side === 'r' ? '0' : 'auto'; };
+    const S = 76;
+    let pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos3') || ''); } catch (_) { return null; } })() || { x: 18, y: Math.round(innerHeight * .55) };
+    const clamp = () => { pos.x = Math.min(Math.max(0, pos.x), innerWidth - S); pos.y = Math.min(Math.max(0, pos.y), innerHeight - S); };
+    const place = () => { clamp(); root.style.left = pos.x + 'px'; root.style.top = pos.y + 'px'; };
     const sh = document.createElement('div'); sh.className = 's';
     const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'b'; btn.innerHTML = '<span class="t">GS<i></i></span>'; btn.setAttribute('aria-label', 'Abrir otras apps de la suite GS'); btn.setAttribute('aria-expanded', 'false');
     const menu = document.createElement('div'); menu.className = 'm'; menu.setAttribute('role', 'menu');
@@ -67,21 +66,21 @@
     const isOpen = () => root.classList.contains('o');
     const close = () => { root.classList.remove('o'); btn.setAttribute('aria-expanded', 'false'); };
     const open = () => {
-      const left = pos.side !== 'r', down = pos.y < innerHeight / 2;
-      menu.style.left = left ? (W + 8) + 'px' : 'auto'; menu.style.right = left ? 'auto' : (W + 8) + 'px';
+      const right = pos.x + S / 2 < innerWidth / 2, down = pos.y < innerHeight / 2;
+      menu.style.left = right ? (S + 10) + 'px' : 'auto'; menu.style.right = right ? 'auto' : (S + 10) + 'px';
       menu.style.top = down ? '0' : 'auto'; menu.style.bottom = down ? 'auto' : '0';
       root.classList.add('o'); btn.setAttribute('aria-expanded', 'true');
     };
     let drag = null, moved = false;
-    root.addEventListener('pointerdown', e => { if (menu.contains(e.target)) return; const r = root.getBoundingClientRect(); drag = { x0: e.clientX, y0: e.clientY, l0: r.left, t0: r.top }; moved = false; try { root.setPointerCapture(e.pointerId); } catch (_) { } });
+    root.addEventListener('pointerdown', e => { if (menu.contains(e.target)) return; drag = { x0: e.clientX, y0: e.clientY, px: pos.x, py: pos.y }; moved = false; try { root.setPointerCapture(e.pointerId); } catch (_) { } });
     root.addEventListener('pointermove', e => {
       if (!drag) return; const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
       if (!moved && Math.abs(dx) + Math.abs(dy) > 6) { moved = true; close(); }
-      if (moved) { root.style.right = 'auto'; root.style.left = Math.min(Math.max(0, drag.l0 + dx), innerWidth - W) + 'px'; root.style.top = clampY(drag.t0 + dy) + 'px'; }
+      if (moved) { pos.x = drag.px + dx; pos.y = drag.py + dy; place(); }
     });
     root.addEventListener('pointerup', e => {
       if (!drag) return; drag = null;
-      if (moved) { const r = root.getBoundingClientRect(); pos = { side: r.left + W / 2 > innerWidth / 2 ? 'r' : 'l', y: r.top }; place(); ls.set('gs.lz.pos2', JSON.stringify(pos)); }
+      if (moved) ls.set('gs.lz.pos3', JSON.stringify(pos));
       else if (!menu.contains(e.target)) (isOpen() ? close() : open());
     });
     btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isOpen() ? close() : open(); } });
