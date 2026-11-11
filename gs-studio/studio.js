@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const labels = { merge: 'Unir PDF', images: 'Imágenes a PDF', organize: 'Organizar PDF', split: 'Dividir PDF', sign: 'Firmar PDF' };
+  const labels = { merge: 'Unir PDF', images: 'Imágenes a PDF', organize: 'Organizar PDF', split: 'Dividir PDF', sign: 'Firmar PDF', flatten: 'Aplanar PDF' };
   const order = ['TD', 'E1', 'E6', 'AR', 'DJ', 'RETIE', 'EC'];
   let selectedPageIds = new Set(), nextPageId = 1;
   let tool = 'merge', pages = [], signatureFile = null, signDirty = false, inEditor = false;
@@ -85,11 +85,12 @@
     $('toolTitle').textContent = labels[next];
     $('signTools').classList.toggle('hidden', next !== 'sign');
     $('splitTools').classList.toggle('hidden', next !== 'split');
-    $('signResultBtn').classList.toggle('hidden', next === 'merge' || !(next === 'organize' && pages.length));
+    $('signResultBtn').classList.toggle('hidden', next === 'merge' || next === 'flatten' || !(next === 'organize' && pages.length));
     $('imagePdfOptions').classList.toggle('hidden',next!=='images');
     $('imageReorderHint').classList.toggle('hidden',next!=='images');
     $('organizeRotationTools').classList.toggle('hidden',next!=='organize');
-    $('fileInput').multiple = next === 'images' || next === 'merge';
+    $('flattenOptions').classList.toggle('hidden',next!=='flatten');
+    $('fileInput').multiple = next === 'images' || next === 'merge' || next === 'flatten';
     $('fileInput').accept = next === 'images' ? 'image/png,image/jpeg,.png,.jpg,.jpeg' : '.pdf,.zip,application/pdf,application/zip';
     $('dropFormats').textContent = next === 'images' ? 'Admite JPG y PNG' : 'Admite PDF y ZIP con documentos PDF';
     $('toolHint').textContent = next === 'images'
@@ -98,9 +99,10 @@
       ? 'Dibuja tu firma manuscrita o carga su imagen. Pulsa sobre la vista previa para elegir su ubicación.'
       : next === 'split'
       ? 'Abre un PDF y especifica el intervalo de páginas que deseas extraer.'
+      : next === 'flatten' ? 'Abre uno o varios PDF editables. Se generará una versión plana de cada uno (si son varios, en un ZIP). Word y Excel: expórtalos primero a PDF.'
       : next === 'merge' ? 'Cada tarjeta representa un documento completo. Arrastra los archivos para definir el orden final de unión.'
       : 'Abre documentos PDF o un ZIP de GS Documentos y organiza sus páginas.';
-    $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : next === 'images' ? 'Generar PDF organizado' : 'Generar PDF';
+    $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : next === 'images' ? 'Generar PDF organizado' : next === 'flatten' ? 'Aplanar y descargar' : 'Generar PDF';
     if (retain) render();
   }
   // Landscape-oriented phones keep scanner access; desktop does not show this control.
@@ -134,7 +136,7 @@
       type: 'pdf', source, index, label: source.name + ' · ' + (index + 1), rotation: 0
     }));
   }
-  function entriesFromSource(source) { return tool === 'merge' ? [{type:'document',source,index:0,label:source.name,rotation:0}] : pagesFromSource(source); }
+  function entriesFromSource(source) { return (tool === 'merge' || tool === 'flatten') ? [{type:'document',source,index:0,label:source.name,rotation:0}] : pagesFromSource(source); }
   async function unpackZip(file) {
     if (!window.JSZip) throw new Error('No se cargó el lector ZIP.');
     const zip = await JSZip.loadAsync(file);
@@ -173,7 +175,7 @@
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     say('Abriendo archivos…');
-    try { await readFiles(files, (tool === 'merge' || tool === 'images') && pages.length > 0); }
+    try { await readFiles(files, (tool === 'merge' || tool === 'flatten' || tool === 'images') && pages.length > 0); }
     catch (error) { say('Error: ' + error.message); }
     finally { $('fileInput').value = ''; }
   });
@@ -204,7 +206,7 @@
     const files = Array.from(event.dataTransfer?.files || []);
     if (!files.length) { say('Arrastra archivos PDF, ZIP o imágenes según la herramienta.'); return; }
     say('Abriendo archivos arrastrados…');
-    try { await readFiles(files, (tool === 'merge' || tool === 'images') && pages.length > 0); }
+    try { await readFiles(files, (tool === 'merge' || tool === 'flatten' || tool === 'images') && pages.length > 0); }
     catch (error) { say('Error: ' + error.message); }
   });
   // Prevent a PDF dropped outside the dropzone from replacing the app in the browser.
@@ -355,7 +357,7 @@
     const [page] = pages.splice(from, 1);
     pages.splice(to, 0, page);
     render();
-    say((tool === 'merge' ? 'Documento' : 'Página') + ' movido a la posición ' + (to + 1) + '.');
+    say(((tool === 'merge' || tool === 'flatten') ? 'Documento' : 'Página') + ' movido a la posición ' + (to + 1) + '.');
   }
   function setupDrag(card, index) {
     // Pointer Events works with mouse, stylus and touch, with no extra library.
@@ -510,7 +512,7 @@
         const remove=nav.lastElementChild;if(remove)remove.classList.add('remove-image');
       }
       card.append(nav); host.append(card); drawPagePreview(entry, canvas);
-      if (tool !== 'sign') { card.title = tool === 'merge' ? 'Arrastra el documento completo para cambiar su orden' : 'Arrastra esta página a otra posición'; setupDrag(card, index); }
+      if (tool !== 'sign') { card.title = (tool === 'merge' || tool === 'flatten') ? 'Arrastra el documento completo para cambiar su orden' : 'Arrastra esta página a otra posición'; setupDrag(card, index); }
       if (tool === 'sign' && entry.type === 'pdf') {
         card.classList.add('sign-target');
         canvas.title = 'Haz clic para ubicar la firma en esta página';
@@ -533,10 +535,10 @@
     $('exportBtn').disabled = !pages.length;
     $('rotateAllLeft').disabled = tool!=='organize' || !pages.some(entry=>entry.type==='pdf');
     $('rotateAllRight').disabled = tool!=='organize' || !pages.some(entry=>entry.type==='pdf');
-    $('signResultBtn').classList.toggle('hidden', tool === 'merge' || !(tool === 'organize' && pages.length));
+    $('signResultBtn').classList.toggle('hidden', tool === 'merge' || tool === 'flatten' || !(tool === 'organize' && pages.length));
     $('signPage').max = String(pages.length);
     $('rangeEnd').value = String(pages.length || 1);
-    say(pages.length + (tool === 'merge' ? ' documento(s) listos para unir.' : ' página(s) preparadas.'));
+    say(pages.length + ((tool === 'merge' || tool === 'flatten') ? ' documento(s) listos' + (tool === 'flatten' ? ' para aplanar.' : ' para unir.') : ' página(s) preparadas.'));
   }
   let drawing = false;
   const coordinates = event => {
@@ -715,12 +717,57 @@
     const base64 = signature.toDataURL('image/png').split(',')[1];
     return { bytes: Uint8Array.from(atob(base64), c => c.charCodeAt(0)), jpg: false };
   }
+  function saveBlob(blob,name){
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;
+    document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+  async function flattenOne(entry,mode){
+    const src=entry.source;
+    if(mode==='raster'){
+      if(!window.pdfjsLib) throw new Error('No se cargó el lector de PDF. Revisa tu conexión.');
+      const pdf=await pdfjsLib.getDocument({data:src.bytes.slice()}).promise;
+      const out=await PDFLib.PDFDocument.create();
+      for(let i=1;i<=pdf.numPages;i++){
+        const pg=await pdf.getPage(i),base=pg.getViewport({scale:1});
+        const scale=Math.min(2.2,4000/Math.max(base.width,base.height));
+        const vp=pg.getViewport({scale}),c=document.createElement('canvas');
+        c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+        const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+        await pg.render({canvasContext:ctx,viewport:vp,annotationMode:pdfjsLib.AnnotationMode?pdfjsLib.AnnotationMode.ENABLE_FORMS:1}).promise;
+        const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.88));
+        const img=await out.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
+        const p=out.addPage([base.width,base.height]);p.drawImage(img,{x:0,y:0,width:base.width,height:base.height});
+        c.width=c.height=0;
+      }
+      return out.save({useObjectStreams:false});
+    }
+    const doc=await PDFLib.PDFDocument.load(src.bytes,{updateMetadata:false});
+    try{ const form=doc.getForm(); if(form.getFields().length){ form.updateFieldAppearances(); form.flatten(); } }catch(e){}
+    return doc.save({useObjectStreams:false});
+  }
+  async function exportFlatten(){
+    const mode=document.querySelector('input[name=flatMode]:checked').value,date=new Date().toISOString().slice(0,10);
+    const results=[];
+    for(let i=0;i<pages.length;i++){
+      say('Aplanando '+(i+1)+' de '+pages.length+'…');
+      const bytes=await flattenOne(pages[i],mode);
+      const base=pages[i].label.split('/').pop().replace(/\.pdf$/i,'');
+      results.push({name:base+'_plano.pdf',bytes});
+    }
+    if(results.length===1) saveBlob(new Blob([results[0].bytes],{type:'application/pdf'}),results[0].name);
+    else{
+      const zip=new JSZip(),used={};
+      results.forEach(r=>{let n=r.name;if(used[n]){n=n.replace(/\.pdf$/,'_'+used[n]+'.pdf');}used[r.name]=(used[r.name]||1)+1;zip.file(n,r.bytes);});
+      saveBlob(await zip.generateAsync({type:'blob'}),'GS_Studio_planos_'+date+'.zip');
+    }
+  }
   async function exportPdf() {
     if (!pages.length) return;
     const button = $('exportBtn'); button.disabled = true;
     say('Generando documento…');
     try {
       if (!window.PDFLib) throw new Error('No está disponible el motor PDF.');
+      if (tool === 'flatten') { await exportFlatten(); clear(); say('Descarga iniciada. PDF aplanado(s) sin posibilidad de edición.'); return; }
       let selected = pages;
       if (tool === 'split') {
         const start = Number($('rangeStart').value), end = Number($('rangeEnd').value);

@@ -116,10 +116,15 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 <button class="tile" data-tool="organize"><img class="tool-icon" src="./icons/organize.svg" alt=""><b>Organizar PDF</b><small>Reordena, gira y elimina páginas</small></button>
 <button class="tile" data-tool="split"><img class="tool-icon" src="./icons/split.svg" alt=""><b>Dividir PDF</b><small>Extrae páginas por rango</small></button>
 <button class="tile" data-tool="sign"><img class="tool-icon" src="./icons/sign.svg" alt=""><b>Firmar PDF</b><small>Firma manuscrita visual, sin certificado digital</small></button>
+<button class="tile" data-tool="flatten"><img class="tool-icon" src="./icons/organize.svg" alt=""><b>Aplanar PDF</b><small>Convierte un PDF editable en plano, no editable</small></button>
 <button class="tile" data-tool="edit"><img class="tool-icon" src="./icons/editor.svg" alt=""><b>Editar PDF</b><small>Corrige documentos escaneados y agrega texto</small></button>
 <button class="tile scan-mobile-only" data-tool="scan"><img class="tool-icon" src="./icons/scan.svg" alt=""><b>Escanear PDF</b><small>Usa la cámara del celular para escanear, recortar y crear PDF</small></button>
 </section>
 <section class="panel hidden" id="editorWorkspace"><div class="toolbar"><button class="secondary" id="backToPdf" type="button">← Volver a herramientas PDF</button></div><h2>GS Editor · Corrección de paquetes</h2><p class="subtitle">Corrige los datos y pulsa «Generar ZIP corregido». El ZIP se descargará normalmente y sus PDF pasarán a GS Studio para que puedas organizarlos, unirlos y firmarlos. Los soportes siguen únicamente en el ZIP.</p><iframe id="editorFrame" title="Editor de paquetes GS Documentos" src="../editor-pc/index.html" loading="lazy"></iframe></section><section class="panel" id="workspace"><span class="orange">HERRAMIENTA ACTIVA</span><h2 id="toolTitle">Unir PDF</h2>
+<section id="flattenOptions" class="image-settings hidden"><div class="image-settings-header"><div><span class="orange">CONFIGURACIÓN</span><h3>Modo de aplanado</h3></div></div>
+<label style="display:block;margin:8px 0"><input type="radio" name="flatMode" value="form" checked> <b>Fijar campos y anotaciones</b> · conserva el texto seleccionable y la calidad; los campos rellenados quedan fijos.</label>
+<label style="display:block;margin:8px 0"><input type="radio" name="flatMode" value="raster"> <b>Convertir a imagen (máxima seguridad)</b> · cada página pasa a imagen; nada se puede editar ni copiar. Pesa más.</label>
+</section>
 <p id="toolHint" class="subtitle">Selecciona los archivos que deseas trabajar.</p>
 <label class="dropzone" id="fileDropzone" for="fileInput"><span class="drop-symbol" aria-hidden="true">⇧</span><strong>Arrastra tus archivos aquí</strong><small>o toca aquí para seleccionarlos desde tu dispositivo</small><small id="dropFormats">Admite PDF y ZIP con documentos PDF</small><input id="fileInput" type="file" multiple accept="application/pdf,.pdf"></label>
 <div id="controls" class="toolbar"><button class="secondary" id="clearBtn">Limpiar selección</button><button class="secondary hidden" id="signResultBtn" type="button">Firmar el resultado</button></div>
@@ -179,7 +184,7 @@ button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;flex-wrap:w
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="./studio.js?v=20261103-2"></script>
+<script src="./studio.js?v=20261111-1"></script>
 <footer class="gs-credit" style="text-align:center;font:600 11.5px/1.4 Manrope,'Segoe UI',Arial,sans-serif;opacity:.6;padding:14px 12px 20px">Desarrollado por Heidi Díaz</footer>
 <script src="./gs-lanzador.js?v=7"></script>
 </body></html>
