@@ -20,13 +20,16 @@
 
   const css = `
   #gsLz{position:fixed;z-index:2147482000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-  #gsLz .b{width:62px;height:62px;border-radius:50%;border:0;cursor:grab;touch-action:none;padding:0;opacity:.96;display:flex;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s;
-    background:repeating-linear-gradient(176deg,rgba(255,255,255,.42) 0 1.5px,rgba(255,255,255,0) 1.5px 4px),repeating-linear-gradient(88deg,rgba(0,110,190,.16) 0 7px,rgba(0,110,190,0) 7px 16px),radial-gradient(circle at 30% 25%,#a9e3ff,#79d1ff 55%,#4cb5f0);
-    box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 0 3.5px rgba(121,209,255,.85),0 10px 24px rgba(20,120,200,.4),0 2px 6px rgba(0,0,0,.2)}
-  #gsLz .b:hover,#gsLz.o .b{opacity:1;transform:scale(1.07)}
-  #gsLz .b .f{width:44px;height:44px;border-radius:14px;border:2.5px solid #ff6600;background:rgba(254,254,255,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,60,110,.25)}
-  #gsLz .b span.t{font:900 18px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#0b4f7a}
-  #gsLz .b span.t i{display:inline-block;width:5px;height:5px;border-radius:50%;background:#ff6600;margin-left:1px}
+  #gsLz{width:70px;height:140px;touch-action:none;cursor:grab}
+  #gsLz .s{position:absolute;top:0;width:70px;height:140px;background:rgba(121,209,255,.62);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);border:1.5px solid rgba(121,209,255,.95);box-sizing:border-box;transition:background .15s}
+  #gsLz.l .s{left:0;border-radius:0 70px 70px 0;border-left:0}
+  #gsLz.r .s{right:0;border-radius:70px 0 0 70px;border-right:0}
+  #gsLz.o .s,#gsLz:hover .s{background:rgba(121,209,255,.8)}
+  #gsLz .b{position:absolute;top:35px;width:68px;height:68px;border-radius:20px;border:3px solid #ff6600;background:rgba(254,254,255,.94);padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,60,110,.28);touch-action:none;transition:transform .15s}
+  #gsLz.l .b{left:8px}#gsLz.r .b{right:8px}
+  #gsLz .b:hover,#gsLz.o .b{transform:scale(1.06)}
+  #gsLz .b span.t{font:900 26px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#0b4f7a}
+  #gsLz .b span.t i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff6600;margin-left:1px}
   #gsLz .m{position:absolute;width:min(300px,86vw);background:#fff;color:#14181d;border-radius:20px;box-shadow:0 16px 44px rgba(10,14,18,.4);padding:12px;display:none;overflow:hidden}
   #gsLz .m:before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,#79d1ff,#ff6600)}
   #gsLz.o .m{display:block;animation:gsLzIn .14s ease-out}
@@ -47,25 +50,38 @@
     if (ss.get() === '1' || document.getElementById('gsLz')) return;
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     const root = document.createElement('div'); root.id = 'gsLz';
-    const pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos') || ''); } catch (_) { return null; } })() || { x: 6, y: Math.round(innerHeight * .55) };
-    const place = () => { const x = Math.min(Math.max(0, pos.x), innerWidth - 62), y = Math.min(Math.max(0, pos.y), innerHeight - 62); root.style.left = x + 'px'; root.style.top = y + 'px'; return { x, y }; };
-    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'b'; btn.innerHTML = '<span class="f"><span class="t">GS<i></i></span></span>'; btn.setAttribute('aria-label', 'Abrir otras apps de la suite GS'); btn.setAttribute('aria-expanded', 'false');
+    let pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos2') || ''); } catch (_) { return null; } })() || { side: 'l', y: Math.round(innerHeight * .5) };
+    const H = 140, W = 70;
+    const clampY = y => Math.min(Math.max(0, y), innerHeight - H);
+    const place = () => { pos.y = clampY(pos.y); root.className = pos.side === 'r' ? 'r' : 'l'; if (root.classList.contains('o')) root.classList.add('o'); root.style.top = pos.y + 'px'; root.style.left = pos.side === 'r' ? 'auto' : '0'; root.style.right = pos.side === 'r' ? '0' : 'auto'; };
+    const sh = document.createElement('div'); sh.className = 's';
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'b'; btn.innerHTML = '<span class="t">GS<i></i></span>'; btn.setAttribute('aria-label', 'Abrir otras apps de la suite GS'); btn.setAttribute('aria-expanded', 'false');
     const menu = document.createElement('div'); menu.className = 'm'; menu.setAttribute('role', 'menu');
     const apps = APPS.filter(a => !a.pc || isPC);
     menu.innerHTML = '<div class="h"><div><b>Suite GS</b><small>Se abre en ventana nueva</small></div><button type="button" data-hide>Ocultar</button></div><div class="g">' +
       apps.map(a => `<a role="menuitem" href="${a.u}" target="_blank" rel="noopener"${cur && cur.id === a.id ? ' class="c"' : ''}><span>${a.i}</span>${a.n}${cur && cur.id === a.id ? '<small>Estás aquí</small>' : ''}</a>`).join('') + '</div>';
-    root.append(btn, menu); document.body.appendChild(root); place();
+    root.append(sh, btn, menu); document.body.appendChild(root); place();
+    const isOpen = () => root.classList.contains('o');
     const close = () => { root.classList.remove('o'); btn.setAttribute('aria-expanded', 'false'); };
     const open = () => {
-      const r = root.getBoundingClientRect(); menu.style.left = r.left > innerWidth / 2 ? 'auto' : '0'; menu.style.right = r.left > innerWidth / 2 ? '0' : 'auto';
-      menu.style.top = r.top > innerHeight / 2 ? 'auto' : '70px'; menu.style.bottom = r.top > innerHeight / 2 ? '70px' : 'auto';
+      const left = pos.side !== 'r', down = pos.y < innerHeight / 2;
+      menu.style.left = left ? (W + 8) + 'px' : 'auto'; menu.style.right = left ? 'auto' : (W + 8) + 'px';
+      menu.style.top = down ? '0' : 'auto'; menu.style.bottom = down ? 'auto' : '0';
       root.classList.add('o'); btn.setAttribute('aria-expanded', 'true');
     };
     let drag = null, moved = false;
-    btn.addEventListener('pointerdown', e => { drag = { dx: e.clientX - root.offsetLeft, dy: e.clientY - root.offsetTop }; moved = false; try { btn.setPointerCapture(e.pointerId); } catch (_) { } });
-    btn.addEventListener('pointermove', e => { if (!drag) return; const nx = e.clientX - drag.dx, ny = e.clientY - drag.dy; if (Math.abs(nx - root.offsetLeft) + Math.abs(ny - root.offsetTop) > 4) moved = true; if (moved) { pos.x = nx; pos.y = ny; place(); close(); } });
-    btn.addEventListener('pointerup', () => { if (!drag) return; drag = null; if (moved) { const p = place(); pos.x = p.x; pos.y = p.y; ls.set('gs.lz.pos', JSON.stringify(pos)); } else (root.classList.contains('o') ? close() : open()); });
-    btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); root.classList.contains('o') ? close() : open(); } });
+    root.addEventListener('pointerdown', e => { if (menu.contains(e.target)) return; const r = root.getBoundingClientRect(); drag = { x0: e.clientX, y0: e.clientY, l0: r.left, t0: r.top }; moved = false; try { root.setPointerCapture(e.pointerId); } catch (_) { } });
+    root.addEventListener('pointermove', e => {
+      if (!drag) return; const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 6) { moved = true; close(); }
+      if (moved) { root.style.right = 'auto'; root.style.left = Math.min(Math.max(0, drag.l0 + dx), innerWidth - W) + 'px'; root.style.top = clampY(drag.t0 + dy) + 'px'; }
+    });
+    root.addEventListener('pointerup', e => {
+      if (!drag) return; drag = null;
+      if (moved) { const r = root.getBoundingClientRect(); pos = { side: r.left + W / 2 > innerWidth / 2 ? 'r' : 'l', y: r.top }; place(); ls.set('gs.lz.pos2', JSON.stringify(pos)); }
+      else if (!menu.contains(e.target)) (isOpen() ? close() : open());
+    });
+    btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isOpen() ? close() : open(); } });
     document.addEventListener('pointerdown', e => { if (!root.contains(e.target)) close(); }, true);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
     menu.addEventListener('click', e => { if (e.target.closest('a')) setTimeout(close, 50); if (e.target.hasAttribute('data-hide')) { ss.set('1'); root.remove(); } });
