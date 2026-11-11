@@ -70,7 +70,9 @@
     const sample=new Float32Array(Math.ceil(N/7)); let sn=0; for(let i=0;i<N;i+=7) sample[sn++]=norm[i];
     const dark=percentile(sample,sn,.01);
     const bias=clamp(Number(opts.bias)||0,-1,1)*.10;
-    const lo=clamp(dark+.12-bias,.22,.62), hi=Math.min(.94,Math.max(lo+.12,lo+.30-bias*.5));
+    let bm=0,bs=0,bn=0;for(let i=0;i<sn;i++){const v=sample[i];if(v>.75){bm+=v;bn++}} bm=bn?bm/bn:1; for(let i=0;i<sn;i++){const v=sample[i];if(v>.75)bs+=(v-bm)*(v-bm)}
+    const hiMax=clamp(bm-3.5*(bn?Math.sqrt(bs/bn):.03),.62,.90); // más tolerante con tintas claras; se ajusta al ruido del papel
+    const lo=clamp(dark+.12-bias,.22,.55), hi=Math.max(lo+.12,hiMax-bias*.5);
     const alpha=new Float32Array(N);
     for(let i=0;i<N;i++){const t=clamp((hi-norm[i])/(hi-lo),0,1);alpha[i]=t*t*(3-2*t)}
 
@@ -106,7 +108,7 @@
       const m=.06*Math.max(W,H); bx0-=m;by0-=m;bx1+=m;by1+=m;
       for(let l=1;l<=nl;l++){const c=comps[l]; if(drop[l]||c.area>=maxA*.12)continue;
         const cx2=(c.x0+c.x1)/2,cy2=(c.y0+c.y1)/2;
-        if(c.area<N*.0012&&(cx2<bx0||cx2>bx1||cy2<by0||cy2>by1)){drop[l]=1;kept--;keptArea-=c.area}}
+        if(c.area<N*.00012&&(cx2<bx0||cx2>bx1||cy2<by0||cy2>by1)){drop[l]=1;kept--;keptArea-=c.area}}
     }
     for(let i=0;i<N;i++){
       if(label[i]&&drop[label[i]]) {alpha[i]=0;continue}
