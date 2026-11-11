@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   if (window.__gsLanzador || window.top !== window.self || window.Native) return;
+  /* Solo en computador: en celular y tablet no se muestra */
+  if (/Android|iPhone|iPad|iPod|Mobile|Silk|CriOS/i.test(navigator.userAgent || '') || !(window.matchMedia && matchMedia('(pointer:fine)').matches)) return;
   window.__gsLanzador = true;
   const APPS = [
     { id: 'diag', n: 'GS Diagnósticos', i: '🧭', u: 'https://gsdiagnosticosapp.vercel.app/' },
