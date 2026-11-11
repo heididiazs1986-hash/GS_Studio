@@ -20,12 +20,15 @@
 
   const css = `
   #gsLz{position:fixed;z-index:2147482000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-  #gsLz .b{width:50px;height:50px;border-radius:16px;border:0;background:linear-gradient(145deg,#fff,#fff4ec);box-shadow:0 0 0 2px #ff6600,0 8px 22px rgba(255,102,0,.35),0 2px 6px rgba(0,0,0,.18);cursor:grab;touch-action:none;padding:0;opacity:.94;display:flex;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s}
-  #gsLz .b:hover,#gsLz.o .b{opacity:1;transform:scale(1.06)}
-  #gsLz .b span{font:900 19px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#14181d}
-  #gsLz .b span i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff6600;margin-left:1px}
+  #gsLz .b{width:62px;height:62px;border-radius:50%;border:0;cursor:grab;touch-action:none;padding:0;opacity:.96;display:flex;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s;
+    background:repeating-linear-gradient(176deg,rgba(255,255,255,.42) 0 1.5px,rgba(255,255,255,0) 1.5px 4px),repeating-linear-gradient(88deg,rgba(0,110,190,.16) 0 7px,rgba(0,110,190,0) 7px 16px),radial-gradient(circle at 30% 25%,#a9e3ff,#79d1ff 55%,#4cb5f0);
+    box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 0 3.5px rgba(121,209,255,.85),0 10px 24px rgba(20,120,200,.4),0 2px 6px rgba(0,0,0,.2)}
+  #gsLz .b:hover,#gsLz.o .b{opacity:1;transform:scale(1.07)}
+  #gsLz .b .f{width:44px;height:44px;border-radius:14px;border:2.5px solid #ff6600;background:rgba(254,254,255,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,60,110,.25)}
+  #gsLz .b span.t{font:900 18px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.5px;color:#0b4f7a}
+  #gsLz .b span.t i{display:inline-block;width:5px;height:5px;border-radius:50%;background:#ff6600;margin-left:1px}
   #gsLz .m{position:absolute;width:min(300px,86vw);background:#fff;color:#14181d;border-radius:20px;box-shadow:0 16px 44px rgba(10,14,18,.4);padding:12px;display:none;overflow:hidden}
-  #gsLz .m:before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,#ff6600,#ff9a4d)}
+  #gsLz .m:before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,#79d1ff,#ff6600)}
   #gsLz.o .m{display:block;animation:gsLzIn .14s ease-out}
   @keyframes gsLzIn{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
   #gsLz .h{padding:4px 4px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -45,8 +48,8 @@
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     const root = document.createElement('div'); root.id = 'gsLz';
     const pos = (() => { try { return JSON.parse(ls.get('gs.lz.pos') || ''); } catch (_) { return null; } })() || { x: 6, y: Math.round(innerHeight * .55) };
-    const place = () => { const x = Math.min(Math.max(0, pos.x), innerWidth - 44), y = Math.min(Math.max(0, pos.y), innerHeight - 44); root.style.left = x + 'px'; root.style.top = y + 'px'; return { x, y }; };
-    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'b'; btn.innerHTML = '<span>GS<i></i></span>'; btn.setAttribute('aria-label', 'Abrir otras apps de la suite GS'); btn.setAttribute('aria-expanded', 'false');
+    const place = () => { const x = Math.min(Math.max(0, pos.x), innerWidth - 62), y = Math.min(Math.max(0, pos.y), innerHeight - 62); root.style.left = x + 'px'; root.style.top = y + 'px'; return { x, y }; };
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'b'; btn.innerHTML = '<span class="f"><span class="t">GS<i></i></span></span>'; btn.setAttribute('aria-label', 'Abrir otras apps de la suite GS'); btn.setAttribute('aria-expanded', 'false');
     const menu = document.createElement('div'); menu.className = 'm'; menu.setAttribute('role', 'menu');
     const apps = APPS.filter(a => !a.pc || isPC);
     menu.innerHTML = '<div class="h"><div><b>Suite GS</b><small>Se abre en ventana nueva</small></div><button type="button" data-hide>Ocultar</button></div><div class="g">' +
@@ -55,7 +58,7 @@
     const close = () => { root.classList.remove('o'); btn.setAttribute('aria-expanded', 'false'); };
     const open = () => {
       const r = root.getBoundingClientRect(); menu.style.left = r.left > innerWidth / 2 ? 'auto' : '0'; menu.style.right = r.left > innerWidth / 2 ? '0' : 'auto';
-      menu.style.top = r.top > innerHeight / 2 ? 'auto' : '52px'; menu.style.bottom = r.top > innerHeight / 2 ? '52px' : 'auto';
+      menu.style.top = r.top > innerHeight / 2 ? 'auto' : '70px'; menu.style.bottom = r.top > innerHeight / 2 ? '70px' : 'auto';
       root.classList.add('o'); btn.setAttribute('aria-expanded', 'true');
     };
     let drag = null, moved = false;
