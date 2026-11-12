@@ -89,7 +89,6 @@
     $('imagePdfOptions').classList.toggle('hidden',next!=='images'&&next!=='merge');
     $('imageReorderHint').classList.toggle('hidden',next!=='images');
     $('organizeRotationTools').classList.toggle('hidden',next!=='organize');
-    $('flattenOptions').classList.toggle('hidden',next!=='flatten');
     $('fileInput').multiple = next === 'images' || next === 'merge' || next === 'flatten';
     $('fileInput').accept = next === 'images' ? 'image/png,image/jpeg,.png,.jpg,.jpeg' : next === 'merge' ? '.pdf,.zip,.png,.jpg,.jpeg,application/pdf,application/zip,image/png,image/jpeg' : '.pdf,.zip,application/pdf,application/zip';
     $('dropFormats').textContent = next === 'images' ? 'Admite JPG y PNG' : next === 'merge' ? 'Admite PDF, ZIP con PDF e imágenes JPG/PNG' : 'Admite PDF y ZIP con documentos PDF';
@@ -99,7 +98,7 @@
       ? 'Dibuja tu firma manuscrita o carga su imagen. Pulsa sobre la vista previa para elegir su ubicación.'
       : next === 'split'
       ? 'Abre un PDF y especifica el intervalo de páginas que deseas extraer.'
-      : next === 'flatten' ? 'Abre uno o varios PDF editables. Se generará una versión plana de cada uno (si son varios, en un ZIP). Word y Excel: expórtalos primero a PDF.'
+      : next === 'flatten' ? 'Abre uno o varios PDF editables. Cada página se convierte en imagen: queda plano, sin campos ni texto editable (si son varios, en un ZIP). Word y Excel: expórtalos primero a PDF.'
       : next === 'merge' ? 'Cada tarjeta es un documento completo o una imagen (JPG/PNG, que pasa a una hoja PDF). Arrastra los archivos para definir el orden final de unión.'
       : 'Abre documentos PDF o un ZIP de GS Documentos y organiza sus páginas.';
     $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : next === 'images' ? 'Generar PDF organizado' : next === 'flatten' ? 'Aplanar y descargar' : 'Generar PDF';
@@ -764,12 +763,12 @@
       const out=await PDFLib.PDFDocument.create();
       for(let i=1;i<=pdf.numPages;i++){
         const pg=await pdf.getPage(i),base=pg.getViewport({scale:1});
-        const scale=Math.min(2.2,4000/Math.max(base.width,base.height));
+        const scale=Math.min(1.8,4000/Math.max(base.width,base.height));
         const vp=pg.getViewport({scale}),c=document.createElement('canvas');
         c.width=Math.round(vp.width);c.height=Math.round(vp.height);
         const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
         await pg.render({canvasContext:ctx,viewport:vp,annotationMode:1}).promise;
-        const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.88));
+        const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.8));
         const img=await out.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
         const p=out.addPage([base.width,base.height]);p.drawImage(img,{x:0,y:0,width:base.width,height:base.height});
         c.width=c.height=0;
@@ -782,7 +781,7 @@
     return doc.save({useObjectStreams:false});
   }
   async function exportFlatten(){
-    const mode=document.querySelector('input[name=flatMode]:checked').value,date=new Date().toISOString().slice(0,10);
+    const mode=window.pdfjsLib?'raster':'form',date=new Date().toISOString().slice(0,10);
     const results=[];
     for(let i=0;i<pages.length;i++){
       say('Aplanando '+(i+1)+' de '+pages.length+'…');
