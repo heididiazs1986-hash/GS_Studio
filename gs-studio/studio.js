@@ -763,12 +763,12 @@
       const out=await PDFLib.PDFDocument.create();
       for(let i=1;i<=pdf.numPages;i++){
         const pg=await pdf.getPage(i),base=pg.getViewport({scale:1});
-        const scale=Math.min(1.8,4000/Math.max(base.width,base.height));
+        const scale=Math.min(2.4,4000/Math.max(base.width,base.height));
         const vp=pg.getViewport({scale}),c=document.createElement('canvas');
         c.width=Math.round(vp.width);c.height=Math.round(vp.height);
         const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
         await pg.render({canvasContext:ctx,viewport:vp,annotationMode:1}).promise;
-        const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.8));
+        const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));
         const img=await out.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
         const p=out.addPage([base.width,base.height]);p.drawImage(img,{x:0,y:0,width:base.width,height:base.height});
         c.width=c.height=0;
