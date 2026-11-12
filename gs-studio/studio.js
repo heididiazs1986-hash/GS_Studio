@@ -86,13 +86,13 @@
     $('signTools').classList.toggle('hidden', next !== 'sign');
     $('splitTools').classList.toggle('hidden', next !== 'split');
     $('signResultBtn').classList.toggle('hidden', next === 'merge' || next === 'flatten' || !(next === 'organize' && pages.length));
-    $('imagePdfOptions').classList.toggle('hidden',next!=='images');
+    $('imagePdfOptions').classList.toggle('hidden',next!=='images'&&next!=='merge');
     $('imageReorderHint').classList.toggle('hidden',next!=='images');
     $('organizeRotationTools').classList.toggle('hidden',next!=='organize');
     $('flattenOptions').classList.toggle('hidden',next!=='flatten');
     $('fileInput').multiple = next === 'images' || next === 'merge' || next === 'flatten';
-    $('fileInput').accept = next === 'images' ? 'image/png,image/jpeg,.png,.jpg,.jpeg' : '.pdf,.zip,application/pdf,application/zip';
-    $('dropFormats').textContent = next === 'images' ? 'Admite JPG y PNG' : 'Admite PDF y ZIP con documentos PDF';
+    $('fileInput').accept = next === 'images' ? 'image/png,image/jpeg,.png,.jpg,.jpeg' : next === 'merge' ? '.pdf,.zip,.png,.jpg,.jpeg,application/pdf,application/zip,image/png,image/jpeg' : '.pdf,.zip,application/pdf,application/zip';
+    $('dropFormats').textContent = next === 'images' ? 'Admite JPG y PNG' : next === 'merge' ? 'Admite PDF, ZIP con PDF e imágenes JPG/PNG' : 'Admite PDF y ZIP con documentos PDF';
     $('toolHint').textContent = next === 'images'
       ? 'Selecciona imágenes JPG o PNG. Gíralas, arrástralas para cambiar su orden y elige cómo ocuparán las hojas del PDF.'
       : next === 'sign'
@@ -100,7 +100,7 @@
       : next === 'split'
       ? 'Abre un PDF y especifica el intervalo de páginas que deseas extraer.'
       : next === 'flatten' ? 'Abre uno o varios PDF editables. Se generará una versión plana de cada uno (si son varios, en un ZIP). Word y Excel: expórtalos primero a PDF.'
-      : next === 'merge' ? 'Cada tarjeta representa un documento completo. Arrastra los archivos para definir el orden final de unión.'
+      : next === 'merge' ? 'Cada tarjeta es un documento completo o una imagen (JPG/PNG, que pasa a una hoja PDF). Arrastra los archivos para definir el orden final de unión.'
       : 'Abre documentos PDF o un ZIP de GS Documentos y organiza sus páginas.';
     $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : next === 'images' ? 'Generar PDF organizado' : next === 'flatten' ? 'Aplanar y descargar' : 'Generar PDF';
     if (retain) render();
@@ -157,8 +157,9 @@
     if (!window.PDFLib) throw new Error('No se cargó el motor PDF. Revisa tu conexión.');
     const incoming = [];
     for (const file of input) {
-      if (tool === 'images') {
-        if (!/^(image\/png|image\/jpeg)$/.test(file.type)) throw new Error('Solo se aceptan imágenes JPG y PNG.');
+      const isImg = /^(image\/png|image\/jpeg)$/.test(file.type) || /\.(png|jpe?g)$/i.test(file.name);
+      if (tool === 'images' || (tool === 'merge' && isImg)) {
+        if (!isImg) throw new Error('Solo se aceptan imágenes JPG y PNG.');
         incoming.push({ type: 'image', file, label: file.name, rotation: 0 });
       } else if (isZip(file.name)) {
         incoming.push(...await unpackZip(file));
@@ -686,7 +687,7 @@
   async function appendPage(output, entry) {
     if (entry.type === 'image') {
       const bytes=new Uint8Array(await entry.file.arrayBuffer());
-      const image=entry.file.type==='image/png'?await output.embedPng(bytes):await output.embedJpg(bytes);
+      const image=(entry.file.type==='image/png'||/\.png$/i.test(entry.file.name))?await output.embedPng(bytes):await output.embedJpg(bytes);
       const layout=imageLayout(image.width,image.height,entry.rotation||0);
       const {sheetWidth,sheetHeight,visibleWidth,visibleHeight,left,bottom,angle,
              imageDrawWidth:w,imageDrawHeight:h,margin,availableWidth,availableHeight,fit}=layout;
@@ -721,6 +722,40 @@
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;
     document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
+  // Quita campos sueltos y anotaciones: dibuja su apariencia dentro de la página y elimina el objeto editable.
+  function flattenAnnotations(doc){
+    const {PDFName,PDFDict,PDFArray,PDFStream,PDFNumber}=PDFLib,ctx=doc.context;
+    const num=(arr,i)=>{const v=arr.lookup(i);return v instanceof PDFNumber?v.asNumber():0};
+    let k=0;
+    for(const page of doc.getPages()){
+      const annots=page.node.lookup(PDFName.of('Annots'));
+      if(!(annots instanceof PDFArray))continue;
+      for(let i=0;i<annots.size();i++){
+        const a=annots.lookup(i);
+        if(!(a instanceof PDFDict))continue;
+        const sub=a.get(PDFName.of('Subtype'));
+        if(sub===PDFName.of('Link')||sub===PDFName.of('Popup'))continue;
+        const flags=a.lookup(PDFName.of('F')),f=flags instanceof PDFNumber?flags.asNumber():0;
+        if(f&2||f&32)continue; // oculta
+        try{
+          const ap=a.lookup(PDFName.of('AP'));if(!(ap instanceof PDFDict))continue;
+          let n=ap.get(PDFName.of('N'));let st=ctx.lookup(n);
+          if(st instanceof PDFDict&&!(st instanceof PDFStream)){const as=a.get(PDFName.of('AS'));n=as?st.get(as):undefined;st=n?ctx.lookup(n):undefined}
+          if(!(st instanceof PDFStream))continue;
+          const rect=a.lookup(PDFName.of('Rect')),bb=st.dict.lookup(PDFName.of('BBox'));if(!(rect instanceof PDFArray)||!(bb instanceof PDFArray))continue;
+          const rx1=Math.min(num(rect,0),num(rect,2)),ry1=Math.min(num(rect,1),num(rect,3)),rw=Math.abs(num(rect,2)-num(rect,0)),rh=Math.abs(num(rect,3)-num(rect,1));
+          const mt=st.dict.lookup(PDFName.of('Matrix'));const m=mt instanceof PDFArray?[0,1,2,3,4,5].map(j=>num(mt,j)):[1,0,0,1,0,0];
+          const xs=[num(bb,0),num(bb,2)],ys=[num(bb,1),num(bb,3)];let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+          for(const x of xs)for(const y of ys){const tx=m[0]*x+m[2]*y+m[4],ty=m[1]*x+m[3]*y+m[5];minx=Math.min(minx,tx);maxx=Math.max(maxx,tx);miny=Math.min(miny,ty);maxy=Math.max(maxy,ty)}
+          const tw=maxx-minx,th=maxy-miny;if(!(tw>0&&th>0&&rw>0&&rh>0))continue;
+          const sx=rw/tw,sy=rh/th,name=page.node.newXObject('GSFlat'+(k++),n);
+          page.pushOperators(PDFLib.pushGraphicsState(),PDFLib.concatTransformationMatrix(sx,0,0,sy,rx1-minx*sx,ry1-miny*sy),PDFLib.drawObject(name),PDFLib.popGraphicsState());
+        }catch(e){console.warn('anotación omitida',e)}
+      }
+      page.node.delete(PDFName.of('Annots'));
+    }
+    try{doc.catalog.delete(PDFName.of('AcroForm'))}catch(e){}
+  }
   async function flattenOne(entry,mode){
     const src=entry.source;
     if(mode==='raster'){
@@ -733,7 +768,7 @@
         const vp=pg.getViewport({scale}),c=document.createElement('canvas');
         c.width=Math.round(vp.width);c.height=Math.round(vp.height);
         const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
-        await pg.render({canvasContext:ctx,viewport:vp,annotationMode:pdfjsLib.AnnotationMode?pdfjsLib.AnnotationMode.ENABLE_FORMS:1}).promise;
+        await pg.render({canvasContext:ctx,viewport:vp,annotationMode:1}).promise;
         const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.88));
         const img=await out.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
         const p=out.addPage([base.width,base.height]);p.drawImage(img,{x:0,y:0,width:base.width,height:base.height});
@@ -743,6 +778,7 @@
     }
     const doc=await PDFLib.PDFDocument.load(src.bytes,{updateMetadata:false});
     try{ const form=doc.getForm(); if(form.getFields().length){ form.updateFieldAppearances(); form.flatten(); } }catch(e){}
+    flattenAnnotations(doc);
     return doc.save({useObjectStreams:false});
   }
   async function exportFlatten(){
