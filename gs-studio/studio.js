@@ -98,7 +98,7 @@
       ? 'Dibuja tu firma manuscrita o carga su imagen. Pulsa sobre la vista previa para elegir su ubicación.'
       : next === 'split'
       ? 'Abre un PDF y especifica el intervalo de páginas que deseas extraer.'
-      : next === 'flatten' ? 'Abre uno o varios PDF editables. Cada página se convierte en imagen: queda plano, sin campos ni texto editable (si son varios, en un ZIP). Word y Excel: expórtalos primero a PDF.'
+      : next === 'flatten' ? 'Abre uno o varios PDF. Solo se aplanan las páginas editables (con campos, casillas o anotaciones); las demás (fotos, cédulas, soportes) quedan intactas. Si son varios, se descargan en un ZIP. Word y Excel: expórtalos primero a PDF.'
       : next === 'merge' ? 'Cada tarjeta es un documento completo o una imagen (JPG/PNG, que pasa a una hoja PDF). Arrastra los archivos para definir el orden final de unión.'
       : 'Abre documentos PDF o un ZIP de GS Documentos y organiza sus páginas.';
     $('exportBtn').textContent = next === 'sign' ? 'Guardar PDF firmado' : next === 'images' ? 'Generar PDF organizado' : next === 'flatten' ? 'Aplanar y descargar' : 'Generar PDF';
@@ -755,32 +755,49 @@
     }
     try{doc.catalog.delete(PDFName.of('AcroForm'))}catch(e){}
   }
+  const flatStats={flat:0,total:0};
   async function flattenOne(entry,mode,onProgress){
     const src=entry.source;
     if(mode==='raster'){
       if(!window.pdfjsLib) throw new Error('No se cargó el lector de PDF. Revisa tu conexión.');
+      // Solo se aplanan las páginas editables (con campos, casillas o anotaciones); las demás se dejan intactas.
+      const orig=await PDFLib.PDFDocument.load(src.bytes,{ignoreEncryption:true,updateMetadata:false});
+      const {PDFName,PDFArray,PDFDict}=PDFLib,total=orig.getPageCount(),edit=[];
+      orig.getPages().forEach((pg,i)=>{
+        const an=pg.node.lookup(PDFName.of('Annots'));let ed=false;
+        if(an instanceof PDFArray)for(let k=0;k<an.size()&&!ed;k++){
+          const x=an.lookup(k);if(!(x instanceof PDFDict))continue;
+          const t=x.get(PDFName.of('Subtype'));if(t!==PDFName.of('Link')&&t!==PDFName.of('Popup'))ed=true;
+        }
+        if(ed)edit.push(i);
+      });
+      flatStats.flat+=edit.length;flatStats.total+=total;
+      if(!edit.length)return src.bytes;
       const pdf=await pdfjsLib.getDocument({data:src.bytes.slice()}).promise;
-      const n=pdf.numPages,done=new Array(n);let next=1,fin=0;
+      const done={};let next=0,fin=0;
       // Varias páginas a la vez: se decodifican, dibujan y comprimen en paralelo (misma resolución y calidad).
       const worker=async()=>{
-        while(next<=n){
-          const i=next++,pg=await pdf.getPage(i),base=pg.getViewport({scale:1});
+        while(next<edit.length){
+          const idx=edit[next++],pg=await pdf.getPage(idx+1),base=pg.getViewport({scale:1});
           const scale=Math.min(2.8,4000/Math.max(base.width,base.height));
           const vp=pg.getViewport({scale}),c=document.createElement('canvas');
           c.width=Math.round(vp.width);c.height=Math.round(vp.height);
           const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
           await pg.render({canvasContext:ctx,viewport:vp,annotationMode:1}).promise;
           const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.9));
-          done[i-1]={w:base.width,h:base.height,bytes:new Uint8Array(await jpg.arrayBuffer())};
+          done[idx]={w:base.width,h:base.height,bytes:new Uint8Array(await jpg.arrayBuffer())};
           c.width=c.height=0;pg.cleanup();
-          if(onProgress)onProgress(++fin,n);
+          if(onProgress)onProgress(++fin,edit.length);
         }
       };
-      await Promise.all(Array.from({length:Math.min(3,n)},worker));
-      const out=await PDFLib.PDFDocument.create();
-      for(const d of done){
-        const img=await out.embedJpg(d.bytes);
-        const p=out.addPage([d.w,d.h]);p.drawImage(img,{x:0,y:0,width:d.w,height:d.h});
+      await Promise.all(Array.from({length:Math.min(3,edit.length)},worker));
+      const keep=[];for(let i=0;i<total;i++)if(!(i in done))keep.push(i);
+      const out=await PDFLib.PDFDocument.create(),copies=keep.length?await out.copyPages(orig,keep):[];
+      let ci=0;
+      for(let i=0;i<total;i++){
+        if(i in done){
+          const d=done[i],img=await out.embedJpg(d.bytes),p=out.addPage([d.w,d.h]);p.drawImage(img,{x:0,y:0,width:d.w,height:d.h});
+        }else out.addPage(copies[ci++]);
       }
       return out.save({useObjectStreams:false});
     }
@@ -791,7 +808,7 @@
   }
   async function exportFlatten(){
     const mode=window.pdfjsLib?'raster':'form',date=new Date().toISOString().slice(0,10);
-    const results=[];
+    const results=[];flatStats.flat=0;flatStats.total=0;
     for(let i=0;i<pages.length;i++){
       say('Aplanando '+(i+1)+' de '+pages.length+'…');
       const bytes=await flattenOne(pages[i],mode,(k,n)=>say('Aplanando '+(i+1)+' de '+pages.length+' · página '+k+' de '+n+'…'));
@@ -811,7 +828,7 @@
     say('Generando documento…');
     try {
       if (!window.PDFLib) throw new Error('No está disponible el motor PDF.');
-      if (tool === 'flatten') { await exportFlatten(); clear(); say('Descarga iniciada. PDF aplanado(s) sin posibilidad de edición.'); return; }
+      if (tool === 'flatten') { await exportFlatten(); clear(); say('Descarga iniciada. Se aplanaron '+(flatStats.total?flatStats.flat+' de '+flatStats.total+' páginas (las demás quedaron intactas).':'las páginas editables.')); return; }
       let selected = pages;
       if (tool === 'split') {
         const start = Number($('rangeStart').value), end = Number($('rangeEnd').value);
