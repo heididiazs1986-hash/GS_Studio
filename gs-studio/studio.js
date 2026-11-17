@@ -755,23 +755,32 @@
     }
     try{doc.catalog.delete(PDFName.of('AcroForm'))}catch(e){}
   }
-  async function flattenOne(entry,mode){
+  async function flattenOne(entry,mode,onProgress){
     const src=entry.source;
     if(mode==='raster'){
       if(!window.pdfjsLib) throw new Error('No se cargó el lector de PDF. Revisa tu conexión.');
       const pdf=await pdfjsLib.getDocument({data:src.bytes.slice()}).promise;
+      const n=pdf.numPages,done=new Array(n);let next=1,fin=0;
+      // Varias páginas a la vez: se decodifican, dibujan y comprimen en paralelo (misma resolución y calidad).
+      const worker=async()=>{
+        while(next<=n){
+          const i=next++,pg=await pdf.getPage(i),base=pg.getViewport({scale:1});
+          const scale=Math.min(2.8,4000/Math.max(base.width,base.height));
+          const vp=pg.getViewport({scale}),c=document.createElement('canvas');
+          c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+          const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+          await pg.render({canvasContext:ctx,viewport:vp,annotationMode:1}).promise;
+          const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.9));
+          done[i-1]={w:base.width,h:base.height,bytes:new Uint8Array(await jpg.arrayBuffer())};
+          c.width=c.height=0;pg.cleanup();
+          if(onProgress)onProgress(++fin,n);
+        }
+      };
+      await Promise.all(Array.from({length:Math.min(3,n)},worker));
       const out=await PDFLib.PDFDocument.create();
-      for(let i=1;i<=pdf.numPages;i++){
-        const pg=await pdf.getPage(i),base=pg.getViewport({scale:1});
-        const scale=Math.min(2.8,4000/Math.max(base.width,base.height));
-        const vp=pg.getViewport({scale}),c=document.createElement('canvas');
-        c.width=Math.round(vp.width);c.height=Math.round(vp.height);
-        const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
-        await pg.render({canvasContext:ctx,viewport:vp,annotationMode:1}).promise;
-        const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.9));
-        const img=await out.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
-        const p=out.addPage([base.width,base.height]);p.drawImage(img,{x:0,y:0,width:base.width,height:base.height});
-        c.width=c.height=0;
+      for(const d of done){
+        const img=await out.embedJpg(d.bytes);
+        const p=out.addPage([d.w,d.h]);p.drawImage(img,{x:0,y:0,width:d.w,height:d.h});
       }
       return out.save({useObjectStreams:false});
     }
@@ -785,7 +794,7 @@
     const results=[];
     for(let i=0;i<pages.length;i++){
       say('Aplanando '+(i+1)+' de '+pages.length+'…');
-      const bytes=await flattenOne(pages[i],mode);
+      const bytes=await flattenOne(pages[i],mode,(k,n)=>say('Aplanando '+(i+1)+' de '+pages.length+' · página '+k+' de '+n+'…'));
       const base=pages[i].label.split('/').pop().replace(/\.pdf$/i,'');
       results.push({name:base+'_plano.pdf',bytes});
     }
